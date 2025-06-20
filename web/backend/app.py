@@ -54,6 +54,8 @@ class PRInfo(BaseModel):
     title: str
     url: Optional[str] = None
     merge_commit: Optional[str] = None
+    base_ref: Optional[str] = None
+    merge_commit_sha: Optional[str] = None
 
 
 class BranchInfo(BaseModel):
@@ -151,7 +153,7 @@ class BranchAnalyzer:
             "gh", "pr", "list",
             "--head", branch,
             "--state", "all",
-            "--json", "number,state,mergeCommit,title,url,headRefName"
+            "--json", "number,state,mergeCommit,title,url,headRefName,baseRefName,mergedAt"
         ])
 
         if result.returncode != 0:
@@ -161,19 +163,53 @@ class BranchAnalyzer:
         try:
             pr_data = json.loads(result.stdout)
             logger.debug(f"Found {len(pr_data)} PRs for branch {branch}")
-            return [
-                PRInfo(
+            prs = []
+            for pr in pr_data:
+                # For merged PRs, get the full PR details to get the merge commit SHA
+                if pr.get("state") == "MERGED" and pr.get("number"):
+                    pr_details = self._get_pr_details(pr["number"])
+                    if pr_details:
+                        pr.update(pr_details)
+
+                prs.append(PRInfo(
                     number=pr["number"],
                     state=pr["state"],
                     title=pr["title"],
                     url=pr.get("url"),
-                    merge_commit=pr.get("mergeCommit", {}).get("oid") if isinstance(pr.get("mergeCommit"), dict) else pr.get("mergeCommit")
-                )
-                for pr in pr_data
-            ]
+                    merge_commit=pr.get("mergeCommit", {}).get("oid") if isinstance(pr.get("mergeCommit"), dict) else pr.get("mergeCommit"),
+                    base_ref=pr.get("baseRefName"),
+                    merge_commit_sha=pr.get("merge_commit_sha")
+                ))
+            return prs
         except (json.JSONDecodeError, KeyError) as e:
             logger.error(f"Failed to parse PR data for branch {branch}: {e}")
             return []
+
+    def _get_pr_details(self, pr_number: int) -> Optional[Dict[str, Any]]:
+        """Get detailed PR information including merge commit SHA"""
+        logger.debug(f"Getting detailed info for PR #{pr_number}")
+        result = self._run_command([
+            "gh", "pr", "view", str(pr_number),
+            "--json", "number,state,mergeCommit,baseRefName,mergedAt,merge_commit_sha"
+        ])
+
+        if result.returncode != 0:
+            # Try API directly
+            api_result = self._run_command([
+                "gh", "api", f"repos/:owner/:repo/pulls/{pr_number}",
+                "--jq", '"{merge_commit_sha: .merge_commit_sha, baseRefName: .base.ref}"'
+            ])
+            if api_result.returncode == 0:
+                try:
+                    return json.loads(api_result.stdout)
+                except:
+                    pass
+            return None
+
+        try:
+            return json.loads(result.stdout)
+        except:
+            return None
 
     def _get_tracking_branch_info(self, branch: str) -> tuple[Optional[str], int, int]:
         """Get tracking branch and count of unpushed/unpulled commits"""
@@ -239,19 +275,27 @@ class BranchAnalyzer:
         # All PRs must be closed
         return PRState.CLOSED
 
-    def _get_merge_commit_for_pr(self, pr_number: int) -> Optional[str]:
-        """Find the merge commit for a PR in the main branch"""
-        logger.info(f"Searching for merge commit for PR #{pr_number} in branch '{self.main_branch}'")
+    def _get_merge_commit_for_pr_info(self, pr: PRInfo) -> Optional[str]:
+        """Get the merge commit for a PR using the PR info"""
+        # First try the merge_commit_sha from the API
+        if pr.merge_commit_sha:
+            logger.debug(f"Using merge_commit_sha from API for PR #{pr.number}: {pr.merge_commit_sha}")
+            return pr.merge_commit_sha
 
-        # First, let's see what merge commits exist
-        debug_result = self._run_command([
-            "git", "log", self.main_branch,
-            "--grep=#",
-            "-n", "10",
-            "--format=%H %s"
-        ])
-        if debug_result.returncode == 0:
-            logger.debug(f"Recent commits with PR numbers:\n{debug_result.stdout}")
+        # Then try the merge_commit from the PR info
+        if pr.merge_commit:
+            logger.debug(f"Using merge_commit from PR info for PR #{pr.number}: {pr.merge_commit}")
+            return pr.merge_commit
+
+        # If we don't have direct merge info, fall back to searching
+        return self._get_merge_commit_for_pr(pr.number, pr.base_ref or self.main_branch)
+
+    def _get_merge_commit_for_pr(self, pr_number: int, target_branch: Optional[str] = None) -> Optional[str]:
+        """Find the merge commit for a PR in the target branch"""
+        if not target_branch:
+            target_branch = self.main_branch
+
+        logger.info(f"Searching for merge commit for PR #{pr_number} in branch '{target_branch}'")
 
         # Try different grep patterns that GitHub uses
         patterns = [
@@ -263,7 +307,7 @@ class BranchAnalyzer:
 
         for pattern in patterns:
             result = self._run_command([
-                "git", "log", self.main_branch,
+                "git", "log", target_branch,
                 f"--grep={pattern}",
                 "-n", "1",
                 "--format=%H"
@@ -272,16 +316,9 @@ class BranchAnalyzer:
             if result.returncode == 0 and result.stdout.strip():
                 commit = result.stdout.strip()
                 logger.info(f"Found merge commit {commit} for PR #{pr_number} using pattern '{pattern}'")
-
-                # Get the commit message to verify
-                msg_result = self._run_command(["git", "log", "-1", "--format=%s", commit])
-                if msg_result.returncode == 0:
-                    logger.debug(f"Commit message: {msg_result.stdout.strip()}")
-
                 return commit
 
-        logger.warning(f"Could not find merge commit for PR #{pr_number} in {self.main_branch}")
-        logger.warning(f"Tried patterns: {patterns}")
+        logger.warning(f"Could not find merge commit for PR #{pr_number} in {target_branch}")
         return None
 
     def _get_patch_id(self, base: str, branch: str) -> Optional[str]:
@@ -318,23 +355,26 @@ class BranchAnalyzer:
         lines.sort()
         return '\n'.join(lines)
 
-    def _compare_branch_with_merged_pr(self, branch: str, pr_number: int) -> tuple[bool, Optional[DiffStats]]:
+    def _compare_branch_with_merged_pr(self, branch: str, pr: PRInfo) -> tuple[bool, Optional[DiffStats]]:
         """Compare branch content with what was merged in the PR"""
-        merge_commit = self._get_merge_commit_for_pr(pr_number)
+        merge_commit = self._get_merge_commit_for_pr_info(pr)
         if not merge_commit:
-            logger.warning(f"Cannot compare branch {branch} - merge commit not found for PR #{pr_number}")
+            logger.warning(f"Cannot compare branch {branch} - merge commit not found for PR #{pr.number}")
             return False, None
 
-        # Get merge base
-        merge_base_result = self._run_command(["git", "merge-base", branch, self.main_branch])
+        # Use the PR's target branch if available, otherwise use main
+        target_branch = pr.base_ref or self.main_branch
+
+        # Get merge base between the branch and the target branch
+        merge_base_result = self._run_command(["git", "merge-base", branch, target_branch])
         if merge_base_result.returncode != 0:
             return False, None
 
         merge_base = merge_base_result.stdout.strip()
 
-        # Get the merge base between the branch and the PR's parent
+        # Get the merge base between the PR and its target
         pr_parent = f"{merge_commit}^1"
-        pr_merge_base_result = self._run_command(["git", "merge-base", pr_parent, self.main_branch])
+        pr_merge_base_result = self._run_command(["git", "merge-base", pr_parent, target_branch])
         if pr_merge_base_result.returncode != 0:
             pr_merge_base = pr_parent  # Fallback to parent if merge-base fails
         else:
@@ -417,7 +457,7 @@ class BranchAnalyzer:
                 # Find the first merged PR
                 merged_pr = next((pr for pr in prs if pr.state == "MERGED"), None)
                 if merged_pr:
-                    identical, stats = self._compare_branch_with_merged_pr(branch, merged_pr.number)
+                    identical, stats = self._compare_branch_with_merged_pr(branch, merged_pr)
                     has_differences = not identical
                     diff_stats = stats
                     status = BranchStatus.REVIEW_REQUIRED if has_differences else BranchStatus.SAFE_TO_DELETE
@@ -547,17 +587,37 @@ class BranchAnalyzer:
     def get_branch_diff(self, branch: str, pr_number: int) -> Dict[str, Any]:
         """Get detailed diff information for a branch compared to its merged PR"""
         logger.info(f"Getting diff for branch {branch} vs PR #{pr_number}")
-        merge_commit = self._get_merge_commit_for_pr(pr_number)
+
+        # Get the PR info to find target branch
+        prs = self._get_pr_info(branch)
+        pr = next((p for p in prs if p.number == pr_number), None)
+
+        if not pr:
+            # Try to get PR info directly
+            pr_details = self._get_pr_details(pr_number)
+            if pr_details:
+                pr = PRInfo(
+                    number=pr_number,
+                    state="MERGED",
+                    title="",
+                    base_ref=pr_details.get("baseRefName"),
+                    merge_commit_sha=pr_details.get("merge_commit_sha")
+                )
+
+        merge_commit = self._get_merge_commit_for_pr_info(pr) if pr else self._get_merge_commit_for_pr(pr_number)
         if not merge_commit:
             error_msg = f"Could not find merge commit for PR #{pr_number}. This might happen if:\n" \
                        f"1. The PR was merged with a different message format\n" \
                        f"2. The PR was rebased/squashed without the PR number in the commit message\n" \
-                       f"3. The branch '{self.main_branch}' doesn't contain the merge"
+                       f"3. The target branch doesn't contain the merge"
             logger.error(error_msg)
             raise Exception(error_msg)
 
+        # Use the PR's target branch if available
+        target_branch = pr.base_ref if pr and pr.base_ref else self.main_branch
+
         # Get merge base
-        merge_base_result = self._run_command(["git", "merge-base", branch, self.main_branch])
+        merge_base_result = self._run_command(["git", "merge-base", branch, target_branch])
         if merge_base_result.returncode != 0:
             raise Exception("Failed to find merge base")
 
@@ -565,7 +625,7 @@ class BranchAnalyzer:
 
         # Get the merge base for the PR
         pr_parent = f"{merge_commit}^1"
-        pr_merge_base_result = self._run_command(["git", "merge-base", pr_parent, self.main_branch])
+        pr_merge_base_result = self._run_command(["git", "merge-base", pr_parent, target_branch])
         if pr_merge_base_result.returncode != 0:
             pr_merge_base = pr_parent
         else:
