@@ -165,8 +165,8 @@ const DiffViewer = ({ data, onClose }) => {
   };
 
   const gitCommands = {
-    branch: `git diff ${data.git_commands?.branch_merge_base || '<merge-base>'}..${data.branch.name}`,
-    pr: `git diff ${data.git_commands?.pr_merge_base || '<pr-parent>'}..${data.git_commands?.merge_commit || '<merge-commit>'}`,
+    branch: `git diff ${data.git_commands?.branch_merge_base || "<merge-base>"}..${data.branch.name}`,
+    pr: `git diff ${data.git_commands?.pr_merge_base || "<pr-parent>"}..${data.git_commands?.merge_commit || "<merge-commit>"}`,
   };
 
   return (
@@ -180,7 +180,17 @@ const DiffViewer = ({ data, onClose }) => {
               <span>{data.branch.name}</span>
               <span className="text-gray-500">vs</span>
               <GitMerge className="h-5 w-5 text-github-merged" />
-              <span>PR #{data.prNumber}</span>
+              <a
+                href={
+                  data.branch.prs?.find((pr) => pr.number === data.prNumber)
+                    ?.url || `#${data.prNumber}`
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                PR #{data.prNumber}
+              </a>
             </h2>
           </div>
           <div className="flex items-center space-x-4">
@@ -226,38 +236,31 @@ const DiffViewer = ({ data, onClose }) => {
         {showCommands && (
           <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <div className="space-y-3">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Git Commands to Generate These Diffs</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Merged PR Diff:</p>
-                  <div className="flex items-center space-x-2">
-                    <code className="flex-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 font-mono">
-                      {gitCommands.pr}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(gitCommands.pr)}
-                      className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-                      title="Copy to clipboard"
-                    >
-                      <Copy className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Branch Diff:</p>
-                  <div className="flex items-center space-x-2">
-                    <code className="flex-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 font-mono">
-                      {gitCommands.branch}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(gitCommands.branch)}
-                      className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-                      title="Copy to clipboard"
-                    >
-                      <Copy className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+                Git Commands to Compare These Diffs
+              </h3>
+              <div className="flex items-center space-x-2">
+                <pre className="flex-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 font-mono overflow-x-auto">
+                  {`# Generate the diff files
+${gitCommands.pr} > merged.diff
+${gitCommands.branch} > local-branch.diff
+
+# Compare them
+diff merged.diff local-branch.diff`}
+                </pre>
+                <button
+                  onClick={() =>
+                    copyToClipboard(`${gitCommands.pr} > merged.diff
+${gitCommands.branch} > local-branch.diff
+
+# Compare them
+diff merged.diff local-branch.diff`)
+                  }
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                  title="Copy to clipboard"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </div>

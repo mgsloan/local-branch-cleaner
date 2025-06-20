@@ -12,6 +12,8 @@ import {
   XCircle,
   Clock,
   User,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 const BranchCard = ({
@@ -82,6 +84,11 @@ const BranchCard = ({
                   Has differences
                 </span>
               )}
+              {branch.has_differences && branch.unpushed_commits > 0 && (
+                <span className="badge bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-200">
+                  ⚠️ Unpushed changes
+                </span>
+              )}
             </div>
 
             {/* PR List */}
@@ -123,6 +130,29 @@ const BranchCard = ({
                   {branch.diff_stats.files_changed}{" "}
                   {branch.diff_stats.files_changed === 1 ? "file" : "files"}
                 </span>
+              </div>
+            )}
+
+            {/* Unpushed/Unpulled Commits */}
+            {(branch.unpushed_commits > 0 || branch.unpulled_commits > 0) && (
+              <div className="mt-2 flex items-center space-x-3 text-sm">
+                {branch.unpushed_commits > 0 && (
+                  <span className="flex items-center space-x-1 text-orange-600 dark:text-orange-400">
+                    <ArrowUp className="h-3 w-3" />
+                    <span>{branch.unpushed_commits} unpushed</span>
+                  </span>
+                )}
+                {branch.unpulled_commits > 0 && (
+                  <span className="flex items-center space-x-1 text-blue-600 dark:text-blue-400">
+                    <ArrowDown className="h-3 w-3" />
+                    <span>{branch.unpulled_commits} unpulled</span>
+                  </span>
+                )}
+                {branch.tracking_branch && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    (tracking {branch.tracking_branch})
+                  </span>
+                )}
               </div>
             )}
 

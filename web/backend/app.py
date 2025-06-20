@@ -65,6 +65,9 @@ class BranchInfo(BaseModel):
     last_commit_author: Optional[str] = None
     diff_stats: Optional[DiffStats] = None
     has_differences: bool = False
+    unpushed_commits: int = 0
+    unpulled_commits: int = 0
+    tracking_branch: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -171,6 +174,32 @@ class BranchAnalyzer:
         except (json.JSONDecodeError, KeyError) as e:
             logger.error(f"Failed to parse PR data for branch {branch}: {e}")
             return []
+
+    def _get_tracking_branch_info(self, branch: str) -> tuple[Optional[str], int, int]:
+        """Get tracking branch and count of unpushed/unpulled commits"""
+        # Get the tracking branch
+        tracking_result = self._run_command([
+            "git", "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"
+        ])
+
+        if tracking_result.returncode != 0:
+            return None, 0, 0
+
+        tracking_branch = tracking_result.stdout.strip()
+
+        # Count unpushed commits (in local but not in remote)
+        unpushed_result = self._run_command([
+            "git", "rev-list", "--count", f"{tracking_branch}..{branch}"
+        ])
+        unpushed = int(unpushed_result.stdout.strip()) if unpushed_result.returncode == 0 else 0
+
+        # Count unpulled commits (in remote but not in local)
+        unpulled_result = self._run_command([
+            "git", "rev-list", "--count", f"{branch}..{tracking_branch}"
+        ])
+        unpulled = int(unpulled_result.stdout.strip()) if unpulled_result.returncode == 0 else 0
+
+        return tracking_branch, unpushed, unpulled
 
     def _get_branch_last_commit_info(self, branch: str) -> tuple[Optional[datetime], Optional[str]]:
         """Get last commit date and author for a branch"""
@@ -370,6 +399,9 @@ class BranchAnalyzer:
             # Get commit info
             last_commit_date, last_commit_author = self._get_branch_last_commit_info(branch)
 
+            # Get tracking branch info
+            tracking_branch, unpushed, unpulled = self._get_tracking_branch_info(branch)
+
             # Determine status and check for differences
             status = BranchStatus.NO_PR
             has_differences = False
@@ -398,7 +430,10 @@ class BranchAnalyzer:
                 last_commit_date=last_commit_date,
                 last_commit_author=last_commit_author,
                 diff_stats=diff_stats,
-                has_differences=has_differences
+                has_differences=has_differences,
+                tracking_branch=tracking_branch,
+                unpushed_commits=unpushed,
+                unpulled_commits=unpulled
             )
         except Exception as e:
             return BranchInfo(
@@ -690,7 +725,7 @@ async def websocket_branches(websocket: WebSocket):
             "message": "Fetching latest changes from remote..."
         })
 
-        fetch_result = analyzer._run_command(["git", "fetch", "origin"])
+        fetch_result = analyzer._run_command(["git", "fetch", "--all", "--prune"])
         if fetch_result.returncode != 0:
             logger.warning(f"Git fetch failed: {fetch_result.stderr}")
 
