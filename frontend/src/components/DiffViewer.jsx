@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import ReactDiffViewer from "react-diff-viewer-continued";
 import {
   X,
@@ -90,6 +90,33 @@ const DiffViewer = ({ data, onClose }) => {
       setSelectedFile(parsedDiffs.files[0].filename);
     }
   }, [parsedDiffs.files, selectedFile]);
+
+  // Keyboard navigation for files
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      const currentIndex = parsedDiffs.files.findIndex(
+        (f) => f.filename === selectedFile,
+      );
+
+      switch (e.key) {
+        case "j":
+          e.preventDefault();
+          if (currentIndex < parsedDiffs.files.length - 1) {
+            setSelectedFile(parsedDiffs.files[currentIndex + 1].filename);
+          }
+          break;
+        case "k":
+          e.preventDefault();
+          if (currentIndex > 0) {
+            setSelectedFile(parsedDiffs.files[currentIndex - 1].filename);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [selectedFile, parsedDiffs.files]);
 
   const getFileIcon = (status) => {
     switch (status) {
@@ -271,16 +298,28 @@ diff merged.diff local-branch.diff`)
           {/* File List Sidebar */}
           <div className="w-80 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
             <div className="p-4">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                Files with Differences ({parsedDiffs.files.length})
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+                  Files with Differences ({parsedDiffs.files.length})
+                </h3>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                    j
+                  </kbd>
+                  /
+                  <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                    k
+                  </kbd>{" "}
+                  to navigate
+                </div>
+              </div>
               <div className="space-y-1">
-                {parsedDiffs.files.map((file) => (
+                {parsedDiffs.files.map((file, index) => (
                   <div
                     key={file.filename}
                     className={`p-2 rounded-md cursor-pointer transition-colors ${
                       selectedFile === file.filename
-                        ? "bg-blue-50 dark:bg-blue-900/20"
+                        ? "bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500"
                         : "hover:bg-gray-100 dark:hover:bg-gray-800"
                     }`}
                     onClick={() => setSelectedFile(file.filename)}
