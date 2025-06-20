@@ -127,7 +127,10 @@ function App() {
             break;
 
           case "progress":
-            setProgress({ current: data.current, total: data.total });
+            setProgress((prev) => ({
+              current: Math.max(prev.current, data.current),
+              total: data.total,
+            }));
             break;
 
           case "branch":
