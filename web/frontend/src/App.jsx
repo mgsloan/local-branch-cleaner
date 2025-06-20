@@ -108,10 +108,12 @@ function App() {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log("WebSocket connected");
+        console.log("WebSocket connected - clearing branches");
         setBranches([]);
         setLoading(true);
         setProgress({ current: 0, total: 0 });
+        setIsPaused(false);
+        setPausedAt(0);
       };
 
       ws.onmessage = (event) => {
@@ -120,6 +122,8 @@ function App() {
         switch (data.type) {
           case "repo_info":
             setRepoInfo(data.data);
+            console.log("Received repo info - clearing branches");
+            setBranches([]); // Clear branches when starting new analysis
             break;
 
           case "status":
@@ -131,7 +135,18 @@ function App() {
             break;
 
           case "branch":
-            setBranches((prev) => [...prev, data.data]);
+            setBranches((prev) => {
+              // Check if branch already exists to prevent duplicates
+              const exists = prev.some((b) => b.name === data.data.name);
+              if (exists) {
+                console.warn(`Duplicate branch received: ${data.data.name}`);
+                return prev;
+              }
+              console.log(
+                `Adding branch: ${data.data.name} (total: ${prev.length + 1})`,
+              );
+              return [...prev, data.data];
+            });
             break;
 
           case "complete":

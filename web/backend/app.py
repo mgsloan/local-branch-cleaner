@@ -403,6 +403,51 @@ class BranchAnalyzer:
 
         return True
 
+    def _normalize_diff_for_display(self, diff_text: str) -> str:
+        """Normalize a diff for display by removing index lines but keeping line numbers intact"""
+        lines = diff_text.split('\n')
+        normalized = []
+
+        for line in lines:
+            # Skip index lines
+            if line.startswith('index '):
+                continue
+            # Skip mode lines
+            if line.startswith('old mode') or line.startswith('new mode'):
+                continue
+            # Skip similarity index
+            if line.startswith('similarity index'):
+                continue
+            # Skip rename lines
+            if line.startswith('rename from') or line.startswith('rename to'):
+                continue
+            # Keep everything else including @@ lines
+            normalized.append(line)
+
+        return '\n'.join(normalized)
+
+    def _get_file_diff(self, full_diff: str, filename: str) -> Optional[str]:
+        """Extract the diff for a specific file from a full diff"""
+        lines = full_diff.split('\n')
+        file_diff_lines = []
+        in_file = False
+
+        for i, line in enumerate(lines):
+            if line.startswith('diff --git'):
+                # Check if this is our file
+                if f' b/{filename}' in line:
+                    in_file = True
+                    file_diff_lines.append(line)
+                else:
+                    in_file = False
+            elif in_file:
+                # Stop at the next file
+                if i + 1 < len(lines) and lines[i + 1].startswith('diff --git'):
+                    break
+                file_diff_lines.append(line)
+
+        return '\n'.join(file_diff_lines) if file_diff_lines else None
+
     def get_branch_diff(self, branch: str, pr_number: int) -> Dict[str, Any]:
         """Get detailed diff information for a branch compared to its merged PR"""
         merge_commit = self._get_merge_commit_for_pr(pr_number)
@@ -425,6 +470,10 @@ class BranchAnalyzer:
             "git", "diff", "--no-color", f"{merge_commit}^1", merge_commit
         ])
 
+        # Normalize diffs for display
+        normalized_branch_diff = self._normalize_diff_for_display(branch_diff_result.stdout)
+        normalized_pr_diff = self._normalize_diff_for_display(pr_diff_result.stdout)
+
         # Get file lists
         branch_files = self._run_command([
             "git", "diff", "--name-status", merge_base, branch
@@ -434,11 +483,42 @@ class BranchAnalyzer:
             "git", "diff", "--name-status", f"{merge_commit}^1", merge_commit
         ])
 
+        branch_files_parsed = self._parse_file_status(branch_files.stdout)
+        pr_files_parsed = self._parse_file_status(pr_files.stdout)
+
+        # Filter out files that are identical between branch and PR
+        filtered_branch_files = []
+        filtered_pr_files = []
+
+        # Create a map of filenames to check
+        all_files = set()
+        for f in branch_files_parsed:
+            all_files.add(f['filename'])
+        for f in pr_files_parsed:
+            all_files.add(f['filename'])
+
+        for filename in all_files:
+            # Get the diff for this file from both sides
+            branch_file_diff = self._get_file_diff(normalized_branch_diff, filename)
+            pr_file_diff = self._get_file_diff(normalized_pr_diff, filename)
+
+            # Only include if they're different
+            if branch_file_diff != pr_file_diff:
+                # Add to filtered lists
+                for f in branch_files_parsed:
+                    if f['filename'] == filename:
+                        filtered_branch_files.append(f)
+                        break
+                for f in pr_files_parsed:
+                    if f['filename'] == filename:
+                        filtered_pr_files.append(f)
+                        break
+
         return {
-            "branch_diff": branch_diff_result.stdout,
-            "pr_diff": pr_diff_result.stdout,
-            "branch_files": self._parse_file_status(branch_files.stdout),
-            "pr_files": self._parse_file_status(pr_files.stdout)
+            "branch_diff": normalized_branch_diff,
+            "pr_diff": normalized_pr_diff,
+            "branch_files": filtered_branch_files,
+            "pr_files": filtered_pr_files
         }
 
     def _parse_file_status(self, output: str) -> List[Dict[str, str]]:
@@ -494,7 +574,6 @@ async def websocket_branches(websocket: WebSocket):
     # State variables
     is_paused = False
     analyzed_branches = set()
-    branch_results = []
     message_queue = asyncio.Queue()
 
     async def receive_messages():
@@ -605,6 +684,7 @@ async def websocket_branches(websocket: WebSocket):
 
             # Skip already analyzed branches (for resume)
             if branch in analyzed_branches:
+                logger.debug(f"Skipping already analyzed branch: {branch}")
                 continue
 
             await websocket.send_json({
@@ -638,9 +718,6 @@ async def websocket_branches(websocket: WebSocket):
                 "type": "branch",
                 "data": branch_data
             })
-
-            # Store result for potential resume
-            branch_results.append(branch_data)
 
             # Small delay to prevent overwhelming the client
             await asyncio.sleep(0.1)

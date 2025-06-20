@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react'
-import ReactDiffViewer from 'react-diff-viewer-continued'
+import React, { useState, useMemo } from "react";
+import ReactDiffViewer from "react-diff-viewer-continued";
 import {
   X,
   FileText,
@@ -12,127 +12,127 @@ import {
   File,
   FilePlus,
   FileMinus,
-  FileEdit
-} from 'lucide-react'
+  FileEdit,
+} from "lucide-react";
 
 const DiffViewer = ({ data, onClose }) => {
-  const [viewMode, setViewMode] = useState('split') // 'split' or 'unified'
-  const [expandedFiles, setExpandedFiles] = useState(new Set())
-  const [selectedFile, setSelectedFile] = useState(null)
+  const [viewMode, setViewMode] = useState("split"); // 'split' or 'unified'
+  const [expandedFiles, setExpandedFiles] = useState(new Set());
+  const [selectedFile, setSelectedFile] = useState(null);
 
   // Parse the diff data
   const parsedDiffs = useMemo(() => {
-    if (!data) return { files: [], hasChanges: false }
+    if (!data) return { files: [], hasChanges: false };
 
-    const branchFiles = new Map(data.branch_files.map(f => [f.filename, f]))
-    const prFiles = new Map(data.pr_files.map(f => [f.filename, f]))
+    const branchFiles = new Map(data.branch_files.map((f) => [f.filename, f]));
+    const prFiles = new Map(data.pr_files.map((f) => [f.filename, f]));
 
     // Get all unique filenames
-    const allFiles = new Set([
-      ...branchFiles.keys(),
-      ...prFiles.keys()
-    ])
+    // Files are already filtered by the backend to only include those with differences
+    const allFiles = new Set();
+    data.branch_files.forEach((f) => allFiles.add(f.filename));
+    data.pr_files.forEach((f) => allFiles.add(f.filename));
 
-    const files = Array.from(allFiles).map(filename => {
-      const branchFile = branchFiles.get(filename)
-      const prFile = prFiles.get(filename)
+    const files = Array.from(allFiles).map((filename) => {
+      const branchFile = branchFiles.get(filename);
+      const prFile = prFiles.get(filename);
 
-      let status = 'modified'
+      let status = "modified";
       if (!prFile) {
-        status = 'added-in-branch'
+        status = "added-in-branch";
       } else if (!branchFile) {
-        status = 'removed-in-branch'
-      } else if (branchFile.status === 'A') {
-        status = 'added'
-      } else if (branchFile.status === 'D') {
-        status = 'deleted'
+        status = "removed-in-branch";
+      } else if (branchFile.status === "A") {
+        status = "added";
+      } else if (branchFile.status === "D") {
+        status = "deleted";
       }
 
       return {
         filename,
         status,
         branchStatus: branchFile?.status,
-        prStatus: prFile?.status
-      }
-    })
+        prStatus: prFile?.status,
+      };
+    });
 
     // Sort files by name
-    files.sort((a, b) => a.filename.localeCompare(b.filename))
+    files.sort((a, b) => a.filename.localeCompare(b.filename));
 
     return {
       files,
-      hasChanges: files.length > 0
-    }
-  }, [data])
+      hasChanges: files.length > 0,
+    };
+  }, [data]);
 
   const getFileIcon = (status) => {
     switch (status) {
-      case 'added':
-      case 'added-in-branch':
-        return <FilePlus className="h-4 w-4 text-green-600" />
-      case 'deleted':
-      case 'removed-in-branch':
-        return <FileMinus className="h-4 w-4 text-red-600" />
+      case "added":
+      case "added-in-branch":
+        return <FilePlus className="h-4 w-4 text-green-600" />;
+      case "deleted":
+      case "removed-in-branch":
+        return <FileMinus className="h-4 w-4 text-red-600" />;
       default:
-        return <FileEdit className="h-4 w-4 text-yellow-600" />
+        return <FileEdit className="h-4 w-4 text-yellow-600" />;
     }
-  }
+  };
 
   const getFileStatusText = (file) => {
     switch (file.status) {
-      case 'added-in-branch':
-        return 'Only in branch'
-      case 'removed-in-branch':
-        return 'Only in PR'
-      case 'added':
-        return 'Added'
-      case 'deleted':
-        return 'Deleted'
+      case "added-in-branch":
+        return "Only in branch";
+      case "removed-in-branch":
+        return "Only in PR";
+      case "added":
+        return "Added";
+      case "deleted":
+        return "Deleted";
       default:
-        return 'Modified'
+        return "Modified";
     }
-  }
+  };
 
   const toggleFile = (filename) => {
-    setExpandedFiles(prev => {
-      const next = new Set(prev)
+    setExpandedFiles((prev) => {
+      const next = new Set(prev);
       if (next.has(filename)) {
-        next.delete(filename)
+        next.delete(filename);
       } else {
-        next.add(filename)
+        next.add(filename);
       }
-      return next
-    })
-  }
+      return next;
+    });
+  };
 
   const extractFileDiff = (fullDiff, filename) => {
     // Simple extraction - in production, use a proper diff parser
-    const lines = fullDiff.split('\n')
-    const fileDiffs = []
-    let currentFile = null
-    let currentDiff = []
+    const lines = fullDiff.split("\n");
+    const fileDiffs = [];
+    let currentFile = null;
+    let currentDiff = [];
 
     for (const line of lines) {
-      if (line.startsWith('diff --git')) {
+      if (line.startsWith("diff --git")) {
         if (currentFile && currentDiff.length > 0) {
-          fileDiffs.push({ file: currentFile, diff: currentDiff.join('\n') })
+          fileDiffs.push({ file: currentFile, diff: currentDiff.join("\n") });
         }
         // Extract filename from diff header
-        const match = line.match(/diff --git a\/(.*) b\/(.*)/)
-        currentFile = match ? match[2] : null
-        currentDiff = [line]
+        const match = line.match(/diff --git a\/(.*) b\/(.*)/);
+        currentFile = match ? match[2] : null;
+        currentDiff = [line];
       } else if (currentFile) {
-        currentDiff.push(line)
+        currentDiff.push(line);
       }
     }
 
     if (currentFile && currentDiff.length > 0) {
-      fileDiffs.push({ file: currentFile, diff: currentDiff.join('\n') })
+      fileDiffs.push({ file: currentFile, diff: currentDiff.join("\n") });
     }
 
-    const fileDiff = fileDiffs.find(fd => fd.file === filename)
-    return fileDiff ? fileDiff.diff : ''
-  }
+    const fileDiff = fileDiffs.find((fd) => fd.file === filename);
+    return fileDiff ? fileDiff.diff : "";
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black bg-opacity-50">
@@ -152,10 +152,12 @@ const DiffViewer = ({ data, onClose }) => {
             {/* View Mode Toggle */}
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => setViewMode(viewMode === 'split' ? 'unified' : 'split')}
+                onClick={() =>
+                  setViewMode(viewMode === "split" ? "unified" : "split")
+                }
                 className="flex items-center space-x-2 px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
               >
-                {viewMode === 'split' ? (
+                {viewMode === "split" ? (
                   <>
                     <ToggleRight className="h-4 w-4" />
                     <span className="text-sm">Split View</span>
@@ -183,22 +185,24 @@ const DiffViewer = ({ data, onClose }) => {
           <div className="w-80 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
             <div className="p-4">
               <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                Changed Files ({parsedDiffs.files.length})
+                Files with Differences ({parsedDiffs.files.length})
               </h3>
               <div className="space-y-1">
-                {parsedDiffs.files.map(file => (
+                {parsedDiffs.files.map((file) => (
                   <div
                     key={file.filename}
                     className={`p-2 rounded-md cursor-pointer transition-colors ${
                       selectedFile === file.filename
-                        ? 'bg-blue-50 dark:bg-blue-900/20'
-                        : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                        ? "bg-blue-50 dark:bg-blue-900/20"
+                        : "hover:bg-gray-100 dark:hover:bg-gray-800"
                     }`}
                     onClick={() => setSelectedFile(file.filename)}
                   >
                     <div className="flex items-center space-x-2">
                       {getFileIcon(file.status)}
-                      <span className="text-sm truncate flex-1">{file.filename}</span>
+                      <span className="text-sm truncate flex-1">
+                        {file.filename}
+                      </span>
                     </div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 ml-6">
                       {getFileStatusText(file)}
@@ -215,7 +219,10 @@ const DiffViewer = ({ data, onClose }) => {
               <div className="p-4">
                 <div className="mb-4">
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center space-x-2">
-                    {getFileIcon(parsedDiffs.files.find(f => f.filename === selectedFile)?.status)}
+                    {getFileIcon(
+                      parsedDiffs.files.find((f) => f.filename === selectedFile)
+                        ?.status,
+                    )}
                     <span>{selectedFile}</span>
                   </h3>
                 </div>
@@ -223,8 +230,10 @@ const DiffViewer = ({ data, onClose }) => {
                   <ReactDiffViewer
                     oldValue={extractFileDiff(data.pr_diff, selectedFile)}
                     newValue={extractFileDiff(data.branch_diff, selectedFile)}
-                    splitView={viewMode === 'split'}
-                    useDarkTheme={window.matchMedia('(prefers-color-scheme: dark)').matches}
+                    splitView={viewMode === "split"}
+                    useDarkTheme={
+                      window.matchMedia("(prefers-color-scheme: dark)").matches
+                    }
                     leftTitle="Merged PR"
                     rightTitle="Current Branch"
                     hideLineNumbers={false}
@@ -243,7 +252,7 @@ const DiffViewer = ({ data, onClose }) => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default DiffViewer
+export default DiffViewer;
