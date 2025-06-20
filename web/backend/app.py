@@ -276,6 +276,19 @@ class BranchAnalyzer:
             return patch_id_result.stdout.split()[0]
         return None
 
+
+    def _extract_changed_lines(self, diff_text: str) -> str:
+        """Extract only lines that start with + or - (actual changes)"""
+        lines = []
+        for line in diff_text.split('\n'):
+            if line.startswith('+') or line.startswith('-'):
+                # Skip the +++ and --- file headers
+                if not line.startswith('+++') and not line.startswith('---'):
+                    lines.append(line)
+        # Sort to ensure consistent comparison
+        lines.sort()
+        return '\n'.join(lines)
+
     def _compare_branch_with_merged_pr(self, branch: str, pr_number: int) -> tuple[bool, Optional[DiffStats]]:
         """Compare branch content with what was merged in the PR"""
         merge_commit = self._get_merge_commit_for_pr(pr_number)
@@ -298,20 +311,23 @@ class BranchAnalyzer:
         else:
             pr_merge_base = pr_merge_base_result.stdout.strip()
 
-        # Use patch-id to compare the actual patch content
-        branch_patch_id = self._get_patch_id(merge_base, branch)
-        pr_patch_id = self._get_patch_id(pr_merge_base, merge_commit)
+        # Get the actual diffs
+        branch_diff_result = self._run_command(["git", "diff", merge_base, branch])
+        pr_diff_result = self._run_command(["git", "diff", pr_merge_base, merge_commit])
 
-        # If we couldn't get patch IDs, fall back to direct diff
-        if not branch_patch_id or not pr_patch_id:
-            logger.warning(f"Could not get patch IDs for branch {branch}, falling back to diff comparison")
-            # Use git's own diff comparison
-            branch_diff = self._run_command(["git", "diff", "--no-index", "--no-prefix", "-w", merge_base, branch])
-            pr_diff = self._run_command(["git", "diff", "--no-index", "--no-prefix", "-w", f"{merge_commit}^1", merge_commit])
-            diffs_match = branch_diff.stdout == pr_diff.stdout
-        else:
-            # Compare patch IDs
-            diffs_match = branch_patch_id == pr_patch_id
+        if branch_diff_result.returncode != 0 or pr_diff_result.returncode != 0:
+            logger.warning(f"Could not get diffs for branch {branch}")
+            return False, None
+
+        # Extract only the actual changed lines (+ and -) for comparison
+        branch_changes = self._extract_changed_lines(branch_diff_result.stdout)
+        pr_changes = self._extract_changed_lines(pr_diff_result.stdout)
+
+        # Compare only the actual changes
+        diffs_match = branch_changes == pr_changes
+
+        if not diffs_match:
+            logger.debug(f"Branch {branch} has different changes than merged PR")
 
         # Get diff stats if there are differences
         stats = None
