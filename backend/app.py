@@ -615,6 +615,40 @@ class BranchAnalyzer:
         """Get detailed diff information for a branch compared to its merged PR"""
         logger.info(f"Getting diff for branch {branch} vs PR #{pr_number}")
 
+        # Special case: if pr_number is 0, just show diff with merge base
+        if pr_number == 0:
+            # Get merge base with main branch
+            merge_base_result = self._run_command(["git", "merge-base", branch, self.main_branch])
+            if merge_base_result.returncode != 0:
+                raise Exception("Failed to find merge base")
+
+            merge_base = merge_base_result.stdout.strip()
+
+            # Get the diff
+            branch_diff_result = self._run_command([
+                "git", "diff", "--no-color", merge_base, branch
+            ])
+
+            # Get file list
+            branch_files = self._run_command([
+                "git", "diff", "--name-status", merge_base, branch
+            ])
+
+            branch_files_parsed = self._parse_file_status(branch_files.stdout)
+
+            return {
+                "branch_diff": branch_diff_result.stdout,
+                "pr_diff": "",  # Empty PR diff
+                "branch_files": branch_files_parsed,
+                "pr_files": [],
+                "git_commands": {
+                    "branch_merge_base": merge_base,
+                    "pr_merge_base": merge_base,
+                    "merge_commit": "HEAD"
+                },
+                "is_merge_base_diff": True
+            }
+
         # Get the PR info to find target branch
         prs = self._get_pr_info(branch)
         pr = next((p for p in prs if p.number == pr_number), None)
@@ -694,6 +728,7 @@ class BranchAnalyzer:
         for f in pr_files_parsed:
             all_files.add(f['filename'])
 
+        has_differences = False
         for filename in all_files:
             # Get the diff for this file from both sides
             branch_file_diff = self._get_file_diff(normalized_branch_diff, filename)
@@ -701,6 +736,7 @@ class BranchAnalyzer:
 
             # Only include if they're different
             if branch_file_diff != pr_file_diff:
+                has_differences = True
                 # Add to filtered lists
                 for f in branch_files_parsed:
                     if f['filename'] == filename:
@@ -710,6 +746,21 @@ class BranchAnalyzer:
                     if f['filename'] == filename:
                         filtered_pr_files.append(f)
                         break
+
+        # If no differences, return the merge base diff instead
+        if not has_differences:
+            return {
+                "branch_diff": branch_diff_result.stdout,
+                "pr_diff": "",  # Empty PR diff
+                "branch_files": branch_files_parsed,
+                "pr_files": [],
+                "git_commands": {
+                    "branch_merge_base": merge_base,
+                    "pr_merge_base": merge_base,
+                    "merge_commit": "HEAD"
+                },
+                "is_merge_base_diff": True
+            }
 
         return {
             "branch_diff": normalized_branch_diff,

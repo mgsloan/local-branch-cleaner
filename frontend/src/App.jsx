@@ -377,12 +377,15 @@ function App() {
 
   const viewDiff = async (branch, prNumber) => {
     try {
+      // If no PR number provided or branch has no differences, show merge base diff
+      const effectivePrNumber = prNumber || 0;
+
       const response = await axios.get(
-        `${API_BASE_URL}/branch/${branch.name}/diff/${prNumber}`,
+        `${API_BASE_URL}/branch/${branch.name}/diff/${effectivePrNumber}`,
       );
       setDiffViewerData({
         branch,
-        prNumber,
+        prNumber: effectivePrNumber,
         ...response.data,
       });
       setShowDiffViewer(true);
@@ -439,9 +442,8 @@ function App() {
           ) {
             const branch = visibleBranches[selectedBranchIndex];
             const mergedPR = branch.prs?.find((pr) => pr.state === "MERGED");
-            if (branch.has_differences && mergedPR) {
-              viewDiff(branch, mergedPR.number);
-            }
+            // Show diff viewer for any branch (merge base diff if no differences)
+            viewDiff(branch, mergedPR?.number);
           }
           break;
 
@@ -734,7 +736,13 @@ function App() {
                                 handleDelete([branch.name], includeRemote)
                               }
                               onViewDiff={(prNumber) =>
-                                viewDiff(branch, prNumber)
+                                // If no differences with PR or no PR, show merge base diff
+                                viewDiff(
+                                  branch,
+                                  !branch.has_differences || !prNumber
+                                    ? null
+                                    : prNumber,
+                                )
                               }
                             />
                           </div>

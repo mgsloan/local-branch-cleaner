@@ -192,11 +192,15 @@ const BranchCard = ({
 
         {/* Actions */}
         <div className="flex items-center space-x-2 ml-4">
-          {branch.has_differences && mergedPR && (
+          {(mergedPR || branch.prs?.length > 0 || true) && (
             <button
-              onClick={() => onViewDiff(mergedPR.number)}
+              onClick={() =>
+                onViewDiff(mergedPR?.number || branch.prs?.[0]?.number || null)
+              }
               className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-              title="View differences"
+              title={
+                branch.has_differences ? "View differences" : "View branch diff"
+              }
             >
               <Eye className="h-4 w-4" />
             </button>

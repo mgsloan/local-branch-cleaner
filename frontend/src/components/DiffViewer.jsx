@@ -138,9 +138,11 @@ const DiffViewer = ({ data, onClose }) => {
           break;
         case "o":
           e.preventDefault();
-          const pr = data.branch.prs?.find((p) => p.number === data.prNumber);
-          if (pr && pr.url) {
-            window.open(pr.url, "_blank");
+          if (!data.is_merge_base_diff) {
+            const pr = data.branch.prs?.find((p) => p.number === data.prNumber);
+            if (pr && pr.url) {
+              window.open(pr.url, "_blank");
+            }
           }
           break;
       }
@@ -238,18 +240,27 @@ const DiffViewer = ({ data, onClose }) => {
               <GitBranch className="h-5 w-5" />
               <span>{data.branch.name}</span>
               <span className="text-gray-500">vs</span>
-              <GitMerge className="h-5 w-5 text-github-merged" />
-              <a
-                href={
-                  data.branch.prs?.find((pr) => pr.number === data.prNumber)
-                    ?.url || `#${data.prNumber}`
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-              >
-                PR #{data.prNumber}
-              </a>
+              {data.is_merge_base_diff ? (
+                <>
+                  <GitBranch className="h-5 w-5" />
+                  <span>merge base</span>
+                </>
+              ) : (
+                <>
+                  <GitMerge className="h-5 w-5 text-github-merged" />
+                  <a
+                    href={
+                      data.branch.prs?.find((pr) => pr.number === data.prNumber)
+                        ?.url || `#${data.prNumber}`
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                  >
+                    PR #{data.prNumber}
+                  </a>
+                </>
+              )}
             </h2>
           </div>
           <div className="flex items-center space-x-4">
@@ -306,14 +317,19 @@ const DiffViewer = ({ data, onClose }) => {
           <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <div className="space-y-3">
               <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-                Git Commands to Compare These Diffs
+                {data.is_merge_base_diff
+                  ? "Git Command to Generate This Diff"
+                  : "Git Commands to Compare These Diffs"}
               </h3>
               <div className="flex items-center space-x-2">
                 <pre
                   className="flex-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 font-mono overflow-x-auto"
                   data-git-commands
                 >
-                  {`# Generate the diff files
+                  {data.is_merge_base_diff
+                    ? `# Generate the diff
+${gitCommands.branch}`
+                    : `# Generate the diff files
 ${gitCommands.pr} > merged.diff
 ${gitCommands.branch} > local-branch.diff
 
@@ -322,11 +338,15 @@ diff merged.diff local-branch.diff`}
                 </pre>
                 <button
                   onClick={() =>
-                    copyToClipboard(`${gitCommands.pr} > merged.diff
+                    copyToClipboard(
+                      data.is_merge_base_diff
+                        ? gitCommands.branch
+                        : `${gitCommands.pr} > merged.diff
 ${gitCommands.branch} > local-branch.diff
 
 # Compare them
-diff merged.diff local-branch.diff`)
+diff merged.diff local-branch.diff`,
+                    )
                   }
                   className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
                   title="Copy to clipboard"
@@ -409,7 +429,9 @@ diff merged.diff local-branch.diff`)
                     useDarkTheme={
                       window.matchMedia("(prefers-color-scheme: dark)").matches
                     }
-                    leftTitle="Merged PR"
+                    leftTitle={
+                      data.is_merge_base_diff ? "Merge Base" : "Merged PR"
+                    }
                     rightTitle="Current Branch"
                     hideLineNumbers={false}
                   />
