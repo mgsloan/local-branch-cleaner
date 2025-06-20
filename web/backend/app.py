@@ -212,15 +212,47 @@ class BranchAnalyzer:
 
     def _get_merge_commit_for_pr(self, pr_number: int) -> Optional[str]:
         """Find the merge commit for a PR in the main branch"""
-        result = self._run_command([
-            "git", "log", self.main_branch,
-            f"--grep=(#{pr_number})",
-            "-n", "1",
-            "--format=%H"
-        ])
+        logger.info(f"Searching for merge commit for PR #{pr_number} in branch '{self.main_branch}'")
 
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
+        # First, let's see what merge commits exist
+        debug_result = self._run_command([
+            "git", "log", self.main_branch,
+            "--grep=#",
+            "-n", "10",
+            "--format=%H %s"
+        ])
+        if debug_result.returncode == 0:
+            logger.debug(f"Recent commits with PR numbers:\n{debug_result.stdout}")
+
+        # Try different grep patterns that GitHub uses
+        patterns = [
+            f"(#{pr_number})",
+            f"#{pr_number}",
+            f"Merge pull request #{pr_number}",
+            f"Merge PR #{pr_number}",
+        ]
+
+        for pattern in patterns:
+            result = self._run_command([
+                "git", "log", self.main_branch,
+                f"--grep={pattern}",
+                "-n", "1",
+                "--format=%H"
+            ])
+
+            if result.returncode == 0 and result.stdout.strip():
+                commit = result.stdout.strip()
+                logger.info(f"Found merge commit {commit} for PR #{pr_number} using pattern '{pattern}'")
+
+                # Get the commit message to verify
+                msg_result = self._run_command(["git", "log", "-1", "--format=%s", commit])
+                if msg_result.returncode == 0:
+                    logger.debug(f"Commit message: {msg_result.stdout.strip()}")
+
+                return commit
+
+        logger.warning(f"Could not find merge commit for PR #{pr_number} in {self.main_branch}")
+        logger.warning(f"Tried patterns: {patterns}")
         return None
 
     def _get_patch_id(self, base: str, branch: str) -> Optional[str]:
@@ -248,6 +280,7 @@ class BranchAnalyzer:
         """Compare branch content with what was merged in the PR"""
         merge_commit = self._get_merge_commit_for_pr(pr_number)
         if not merge_commit:
+            logger.warning(f"Cannot compare branch {branch} - merge commit not found for PR #{pr_number}")
             return False, None
 
         # Get merge base
@@ -257,9 +290,17 @@ class BranchAnalyzer:
 
         merge_base = merge_base_result.stdout.strip()
 
+        # Get the merge base between the branch and the PR's parent
+        pr_parent = f"{merge_commit}^1"
+        pr_merge_base_result = self._run_command(["git", "merge-base", pr_parent, self.main_branch])
+        if pr_merge_base_result.returncode != 0:
+            pr_merge_base = pr_parent  # Fallback to parent if merge-base fails
+        else:
+            pr_merge_base = pr_merge_base_result.stdout.strip()
+
         # Use patch-id to compare the actual patch content
         branch_patch_id = self._get_patch_id(merge_base, branch)
-        pr_patch_id = self._get_patch_id(f"{merge_commit}^1", merge_commit)
+        pr_patch_id = self._get_patch_id(pr_merge_base, merge_commit)
 
         # If we couldn't get patch IDs, fall back to direct diff
         if not branch_patch_id or not pr_patch_id:
@@ -305,7 +346,6 @@ class BranchAnalyzer:
 
     def analyze_branch(self, branch: str) -> BranchInfo:
         """Analyze a single branch (synchronous version)"""
-        logger.info(f"Starting analysis of branch: {branch}")
         try:
             # Get PR info
             prs = self._get_pr_info(branch)
@@ -450,9 +490,15 @@ class BranchAnalyzer:
 
     def get_branch_diff(self, branch: str, pr_number: int) -> Dict[str, Any]:
         """Get detailed diff information for a branch compared to its merged PR"""
+        logger.info(f"Getting diff for branch {branch} vs PR #{pr_number}")
         merge_commit = self._get_merge_commit_for_pr(pr_number)
         if not merge_commit:
-            raise Exception(f"Could not find merge commit for PR #{pr_number}")
+            error_msg = f"Could not find merge commit for PR #{pr_number}. This might happen if:\n" \
+                       f"1. The PR was merged with a different message format\n" \
+                       f"2. The PR was rebased/squashed without the PR number in the commit message\n" \
+                       f"3. The branch '{self.main_branch}' doesn't contain the merge"
+            logger.error(error_msg)
+            raise Exception(error_msg)
 
         # Get merge base
         merge_base_result = self._run_command(["git", "merge-base", branch, self.main_branch])
@@ -461,13 +507,21 @@ class BranchAnalyzer:
 
         merge_base = merge_base_result.stdout.strip()
 
-        # Get the diffs
+        # Get the merge base for the PR
+        pr_parent = f"{merge_commit}^1"
+        pr_merge_base_result = self._run_command(["git", "merge-base", pr_parent, self.main_branch])
+        if pr_merge_base_result.returncode != 0:
+            pr_merge_base = pr_parent
+        else:
+            pr_merge_base = pr_merge_base_result.stdout.strip()
+
+        # Get the diffs relative to their respective merge bases
         branch_diff_result = self._run_command([
             "git", "diff", "--no-color", merge_base, branch
         ])
 
         pr_diff_result = self._run_command([
-            "git", "diff", "--no-color", f"{merge_commit}^1", merge_commit
+            "git", "diff", "--no-color", pr_merge_base, merge_commit
         ])
 
         # Normalize diffs for display
@@ -480,7 +534,7 @@ class BranchAnalyzer:
         ])
 
         pr_files = self._run_command([
-            "git", "diff", "--name-status", f"{merge_commit}^1", merge_commit
+            "git", "diff", "--name-status", pr_merge_base, merge_commit
         ])
 
         branch_files_parsed = self._parse_file_status(branch_files.stdout)
@@ -695,8 +749,6 @@ async def websocket_branches(websocket: WebSocket):
             })
 
             # Run analysis in a separate thread to make it interruptible
-            logger.info(f"Analyzing branch {branch} ({len(analyzed_branches)+1}/{total})")
-
             # Run the synchronous analyze_branch in a thread pool
             loop = asyncio.get_event_loop()
             branch_info = await loop.run_in_executor(None, analyzer.analyze_branch, branch)
@@ -706,7 +758,6 @@ async def websocket_branches(websocket: WebSocket):
                 return
 
             analyzed_branches.add(branch)
-            logger.info(f"Completed analysis of branch {branch}")
 
             # Send branch data
             # Convert datetime to ISO format string for JSON serialization
