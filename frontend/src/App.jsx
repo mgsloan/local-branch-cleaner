@@ -233,13 +233,59 @@ function App() {
     if (selectedBranchIndex >= 0) {
       const branchElements = document.querySelectorAll("[data-branch-card]");
       if (branchElements[selectedBranchIndex]) {
-        branchElements[selectedBranchIndex].scrollIntoView({
-          behavior: "instant",
-          block: "nearest",
-        });
+        const selectedBranch = visibleBranches[selectedBranchIndex];
+        const isLastItem = selectedBranchIndex === visibleBranches.length - 1;
+
+        // Check if this is the last item overall
+        if (isLastItem) {
+          const footer = document.querySelector("[data-keyboard-shortcuts]");
+          if (footer) {
+            footer.scrollIntoView({
+              behavior: "instant",
+              block: "end",
+            });
+            return;
+          }
+        }
+
+        // Check if this is the first branch in its category
+        let isFirstInCategory = false;
+        for (const [categoryKey, categoryInfo] of Object.entries(
+          BRANCH_CATEGORIES,
+        )) {
+          const branchesInCategory = categorizedBranches[categoryKey] || [];
+          if (
+            branchesInCategory.length > 0 &&
+            branchesInCategory[0].name === selectedBranch.name
+          ) {
+            isFirstInCategory = true;
+            // Find and scroll to the category header instead
+            const categoryHeaders = document.querySelectorAll(
+              "[data-category-header]",
+            );
+            for (const header of categoryHeaders) {
+              if (header.getAttribute("data-category-key") === categoryKey) {
+                header.scrollIntoView({
+                  behavior: "instant",
+                  block: "start",
+                });
+                return;
+              }
+            }
+            break;
+          }
+        }
+
+        // Regular scroll for non-first items
+        if (!isFirstInCategory) {
+          branchElements[selectedBranchIndex].scrollIntoView({
+            behavior: "instant",
+            block: "nearest",
+          });
+        }
       }
     }
-  }, [selectedBranchIndex]);
+  }, [selectedBranchIndex, visibleBranches, categorizedBranches]);
 
   const toggleCategory = (category) => {
     setExpandedCategories((prev) => {
@@ -613,6 +659,8 @@ function App() {
                   <div
                     className={`card p-4 cursor-pointer ${categoryInfo.bgColor} ${categoryInfo.borderColor}`}
                     onClick={() => toggleCategory(categoryKey)}
+                    data-category-header
+                    data-category-key={categoryKey}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
@@ -727,7 +775,10 @@ function App() {
           )}
 
           {/* Keyboard shortcuts help */}
-          <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+          <div
+            className="text-center py-4 text-sm text-gray-500 dark:text-gray-400"
+            data-keyboard-shortcuts
+          >
             <span className="font-medium">Keyboard shortcuts:</span>{" "}
             <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
               j/k
