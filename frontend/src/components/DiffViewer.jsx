@@ -111,6 +111,23 @@ const DiffViewer = ({ data, onClose }) => {
             setSelectedFile(parsedDiffs.files[currentIndex - 1].filename);
           }
           break;
+        case "g":
+          e.preventDefault();
+          setShowCommands(true);
+          // Select the git commands text after a short delay
+          setTimeout(() => {
+            const commandsElement = document.querySelector(
+              "[data-git-commands]",
+            );
+            if (commandsElement) {
+              const selection = window.getSelection();
+              const range = document.createRange();
+              range.selectNodeContents(commandsElement);
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+          }, 100);
+          break;
       }
     };
 
@@ -228,6 +245,9 @@ const DiffViewer = ({ data, onClose }) => {
             >
               <Terminal className="h-4 w-4" />
               <span className="text-sm">Git Commands</span>
+              <kbd className="ml-1 text-xs px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                G
+              </kbd>
             </button>
             {/* View Mode Toggle */}
             <div className="flex items-center space-x-2">
@@ -267,7 +287,10 @@ const DiffViewer = ({ data, onClose }) => {
                 Git Commands to Compare These Diffs
               </h3>
               <div className="flex items-center space-x-2">
-                <pre className="flex-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 font-mono overflow-x-auto">
+                <pre
+                  className="flex-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 font-mono overflow-x-auto"
+                  data-git-commands
+                >
                   {`# Generate the diff files
 ${gitCommands.pr} > merged.diff
 ${gitCommands.branch} > local-branch.diff
