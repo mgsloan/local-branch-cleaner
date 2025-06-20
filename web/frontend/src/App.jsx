@@ -20,13 +20,14 @@ import {
   XCircle,
   GitCommit,
   ExternalLink,
+  Pause,
 } from "lucide-react";
 import DiffViewer from "./components/DiffViewer";
 import BranchCard from "./components/BranchCard";
 import ConfirmDialog from "./components/ConfirmDialog";
 
 const API_BASE_URL = "/api";
-const WS_URL = "ws://localhost:8000/ws/branches";
+const WS_URL = "ws://127.0.0.1:8000/ws/branches";
 
 const BRANCH_CATEGORIES = {
   safe_to_delete: {
@@ -90,11 +91,13 @@ function App() {
   });
   const [statusMessage, setStatusMessage] = useState("");
   const [repoInfo, setRepoInfo] = useState(null);
+  const [wsConnection, setWsConnection] = useState(null);
 
   // WebSocket connection for streaming branch data
   useEffect(() => {
     const connectWebSocket = () => {
       const ws = new WebSocket(WS_URL);
+      setWsConnection(ws);
 
       ws.onopen = () => {
         console.log("WebSocket connected");
@@ -145,6 +148,7 @@ function App() {
       ws.onclose = () => {
         console.log("WebSocket disconnected");
         setLoading(false);
+        setWsConnection(null);
       };
 
       return ws;
@@ -278,6 +282,14 @@ function App() {
     window.location.reload();
   };
 
+  const pauseAnalysis = () => {
+    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+      wsConnection.close();
+      setLoading(false);
+      setStatusMessage("Analysis paused");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -310,16 +322,23 @@ function App() {
                 </div>
               </div>
             )}
-            <button
-              onClick={refresh}
-              className="btn btn-secondary flex items-center space-x-2"
-              disabled={loading}
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
-              />
-              <span>Refresh</span>
-            </button>
+            {loading ? (
+              <button
+                onClick={pauseAnalysis}
+                className="btn btn-secondary flex items-center space-x-2"
+              >
+                <Pause className="h-4 w-4" />
+                <span>Pause</span>
+              </button>
+            ) : (
+              <button
+                onClick={refresh}
+                className="btn btn-secondary flex items-center space-x-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Refresh</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
