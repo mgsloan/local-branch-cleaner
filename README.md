@@ -1,4 +1,4 @@
-# GitHub Branch Cleaner
+# Local Branch Cleaner (based on GitHub PRs)
 
 The purpose of this utility is to safely delete local git branches, by looking at associated PRs in GitHub. I use fuzzy text search when switching branches and to keep track of work-in-progress changes, so it's nice to have a way to keep the list tidy.
 
@@ -7,6 +7,8 @@ This also helps with the case where you've forgotten to push to a PR or merged a
 This was 100% vibecoded using Zed Agent + Claude Opus 4. I literally made no code changes myself. I've barely looked at the code, but it seems to work well - use at your own risk! Known rough corners:
 
 * Probably only works when pushing branches to the same repo
+
+* Only known to work for squash-and-rebased PRs.  Good chances it works for PRs merged with merge commits.  Probably does not work for PRs that are merged via rebase
 
 Run `path-to-this-repo/start.sh` from within a git repository that has a GitHub remote URL to start the server and automatically open in your browser.
 
