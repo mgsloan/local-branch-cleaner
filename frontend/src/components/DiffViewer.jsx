@@ -136,12 +136,19 @@ const DiffViewer = ({ data, onClose }) => {
           e.preventDefault();
           setViewMode((prev) => (prev === "split" ? "unified" : "split"));
           break;
+        case "o":
+          e.preventDefault();
+          const pr = data.branch.prs?.find((p) => p.number === data.prNumber);
+          if (pr && pr.url) {
+            window.open(pr.url, "_blank");
+          }
+          break;
       }
     };
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [selectedFile, parsedDiffs.files, onClose]);
+  }, [selectedFile, parsedDiffs.files, onClose, data]);
 
   const getFileIcon = (status) => {
     switch (status) {
@@ -348,7 +355,11 @@ diff merged.diff local-branch.diff`)
                   <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
                     k
                   </kbd>{" "}
-                  to navigate
+                  to navigate •{" "}
+                  <kbd className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                    o
+                  </kbd>{" "}
+                  open PR
                 </div>
               </div>
               <div className="space-y-1">

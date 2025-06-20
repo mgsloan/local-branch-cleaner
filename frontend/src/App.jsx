@@ -458,6 +458,22 @@ function App() {
           }
           break;
 
+        case "o":
+          e.preventDefault();
+          if (
+            selectedBranchIndex >= 0 &&
+            selectedBranchIndex < visibleBranches.length
+          ) {
+            const branch = visibleBranches[selectedBranchIndex];
+            const pr =
+              branch.prs?.find((pr) => pr.state === "MERGED") ||
+              branch.prs?.[0];
+            if (pr && pr.url) {
+              window.open(pr.url, "_blank");
+            }
+          }
+          break;
+
         case "a":
           e.preventDefault();
           if (
@@ -790,7 +806,11 @@ function App() {
             <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
               d
             </kbd>{" "}
-            delete
+            delete{" "}
+            <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+              o
+            </kbd>{" "}
+            open PR
           </div>
         </div>
       </main>
