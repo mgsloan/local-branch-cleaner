@@ -8,7 +8,7 @@ This was 100% vibecoded using Zed Agent + Claude Opus 4. I literally made no cod
 
 * Probably only works when pushing branches to the same repo
 
-Run `path-to-this-repo/start.sh` from within a git repository that has a GitHub remote URL to start the server and navigate to `localhost:3000`.
+Run `path-to-this-repo/start.sh` from within a git repository that has a GitHub remote URL to start the server and automatically open in your browser.
 
 ## Prerequisites
 

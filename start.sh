@@ -114,7 +114,19 @@ for i in {1..30}; do
 done
 
 echo -e "\n${GREEN}🎉 Branch Cleaner Web UI is running!${NC}"
-echo -e "${BLUE}📍 Open http://localhost:3000 in your browser${NC}"
+echo -e "${BLUE}📍 Opening http://localhost:3000 in your browser...${NC}"
+
+# Open browser automatically
+if command -v xdg-open &> /dev/null; then
+    xdg-open http://localhost:3000
+elif command -v open &> /dev/null; then
+    open http://localhost:3000
+elif command -v start &> /dev/null; then
+    start http://localhost:3000
+else
+    echo -e "${BLUE}📍 Please open http://localhost:3000 in your browser${NC}"
+fi
+
 echo -e "\nPress Ctrl+C to stop all services\n"
 
 # Wait for background processes
