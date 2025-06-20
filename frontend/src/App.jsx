@@ -231,7 +231,7 @@ function App() {
       const branchElements = document.querySelectorAll("[data-branch-card]");
       if (branchElements[selectedBranchIndex]) {
         branchElements[selectedBranchIndex].scrollIntoView({
-          behavior: "smooth",
+          behavior: "instant",
           block: "nearest",
         });
       }
