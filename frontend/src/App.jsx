@@ -421,6 +421,26 @@ function App() {
           }
           break;
 
+        case "a":
+          e.preventDefault();
+          if (
+            selectedBranchIndex >= 0 &&
+            selectedBranchIndex < visibleBranches.length
+          ) {
+            const branch = visibleBranches[selectedBranchIndex];
+            // Find which category this branch belongs to
+            for (const [categoryKey, categoryInfo] of Object.entries(
+              BRANCH_CATEGORIES,
+            )) {
+              const branchesInCategory = categorizedBranches[categoryKey] || [];
+              if (branchesInCategory.some((b) => b.name === branch.name)) {
+                selectAllInCategory(categoryKey);
+                break;
+              }
+            }
+          }
+          break;
+
         case "Escape":
           e.preventDefault();
           setSelectedBranches(new Set());
@@ -717,6 +737,10 @@ function App() {
               space/x
             </kbd>{" "}
             select{" "}
+            <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+              a
+            </kbd>{" "}
+            select all in section{" "}
             <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
               enter
             </kbd>{" "}
