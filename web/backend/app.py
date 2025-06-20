@@ -223,6 +223,32 @@ class BranchAnalyzer:
             return result.stdout.strip()
         return None
 
+    def _normalize_diff(self, diff_text: str) -> str:
+        """Normalize a diff by removing index lines and adjusting line numbers"""
+        lines = diff_text.split('\n')
+        normalized = []
+
+        for line in lines:
+            # Skip index lines
+            if line.startswith('index '):
+                continue
+            # Skip diff header lines
+            if line.startswith('diff --git'):
+                continue
+            # Normalize @@ lines by removing line numbers
+            if line.startswith('@@'):
+                # Extract just the function context if present
+                parts = line.split('@@')
+                if len(parts) >= 3:
+                    # Keep the @@ markers and function context, but not line numbers
+                    normalized.append('@@ normalized @@' + parts[2])
+                else:
+                    normalized.append('@@ normalized @@')
+            else:
+                normalized.append(line)
+
+        return '\n'.join(normalized)
+
     def _compare_branch_with_merged_pr(self, branch: str, pr_number: int) -> tuple[bool, Optional[DiffStats]]:
         """Compare branch content with what was merged in the PR"""
         merge_commit = self._get_merge_commit_for_pr(pr_number)
@@ -236,60 +262,47 @@ class BranchAnalyzer:
 
         merge_base = merge_base_result.stdout.strip()
 
-        # Create temp files for diffs
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f1, \
-             tempfile.NamedTemporaryFile(mode='w', delete=False) as f2:
+        # Get diffs
+        branch_diff = self._run_command(["git", "diff", merge_base, branch])
+        pr_diff = self._run_command(["git", "diff", f"{merge_commit}^1", merge_commit])
 
-            # Get branch diff
-            branch_diff = self._run_command(["git", "diff", merge_base, branch])
-            f1.write(branch_diff.stdout)
-            f1.flush()
+        # Normalize diffs to ignore index and line number changes
+        normalized_branch = self._normalize_diff(branch_diff.stdout)
+        normalized_pr = self._normalize_diff(pr_diff.stdout)
 
-            # Get PR diff
-            pr_diff = self._run_command(["git", "diff", f"{merge_commit}^1", merge_commit])
-            f2.write(pr_diff.stdout)
-            f2.flush()
+        # Compare normalized diffs
+        diffs_match = normalized_branch == normalized_pr
 
-            # Compare diffs
-            diff_result = subprocess.run(
-                ["diff", "-Bw", f1.name, f2.name],
-                capture_output=True
-            )
+        # Get diff stats if there are differences
+        stats = None
+        if not diffs_match:
+            # Get stats for the branch
+            stats_result = self._run_command([
+                "git", "diff", "--numstat", merge_base, branch
+            ])
+            if stats_result.returncode == 0:
+                lines = stats_result.stdout.strip().split('\n')
+                additions = 0
+                deletions = 0
+                files_changed = 0
+                for line in lines:
+                    if line:
+                        parts = line.split('\t')
+                        if len(parts) >= 2:
+                            try:
+                                additions += int(parts[0])
+                                deletions += int(parts[1])
+                                files_changed += 1
+                            except ValueError:
+                                pass
 
-            # Get diff stats if there are differences
-            stats = None
-            if diff_result.returncode != 0:
-                # Get stats for the branch
-                stats_result = self._run_command([
-                    "git", "diff", "--numstat", merge_base, branch
-                ])
-                if stats_result.returncode == 0:
-                    lines = stats_result.stdout.strip().split('\n')
-                    additions = 0
-                    deletions = 0
-                    files_changed = 0
-                    for line in lines:
-                        if line:
-                            parts = line.split('\t')
-                            if len(parts) >= 2:
-                                try:
-                                    additions += int(parts[0])
-                                    deletions += int(parts[1])
-                                    files_changed += 1
-                                except ValueError:
-                                    pass
+                stats = DiffStats(
+                    additions=additions,
+                    deletions=deletions,
+                    files_changed=files_changed
+                )
 
-                    stats = DiffStats(
-                        additions=additions,
-                        deletions=deletions,
-                        files_changed=files_changed
-                    )
-
-            # Clean up temp files
-            os.unlink(f1.name)
-            os.unlink(f2.name)
-
-            return diff_result.returncode == 0, stats
+        return diffs_match, stats
 
     async def analyze_branch(self, branch: str) -> BranchInfo:
         """Analyze a single branch"""
@@ -511,6 +524,11 @@ async def websocket_branches(websocket: WebSocket):
 
         # Analyze branches and stream results
         for i, branch in enumerate(branches):
+            # Check if client is still connected
+            if websocket.client_state.value != 1:  # 1 = WebSocketState.CONNECTED
+                logger.info("WebSocket disconnected, stopping analysis")
+                break
+
             await websocket.send_json({
                 "type": "progress",
                 "current": i + 1,
@@ -535,11 +553,12 @@ async def websocket_branches(websocket: WebSocket):
             # Small delay to prevent overwhelming the client
             await asyncio.sleep(0.1)
 
-        # Send completion
-        await websocket.send_json({
-            "type": "complete",
-            "total": total
-        })
+        # Send completion only if we finished all branches
+        if websocket.client_state.value == 1:
+            await websocket.send_json({
+                "type": "complete",
+                "total": total
+            })
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")

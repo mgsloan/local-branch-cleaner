@@ -92,16 +92,27 @@ function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [repoInfo, setRepoInfo] = useState(null);
   const [wsConnection, setWsConnection] = useState(null);
+  const [isPaused, setIsPaused] = useState(false);
 
   // WebSocket connection for streaming branch data
   useEffect(() => {
+    // Skip if paused or already connected
+    if (
+      isPaused ||
+      (wsConnection && wsConnection.readyState === WebSocket.OPEN)
+    ) {
+      return;
+    }
+
     const connectWebSocket = () => {
       const ws = new WebSocket(WS_URL);
       setWsConnection(ws);
 
       ws.onopen = () => {
         console.log("WebSocket connected");
-        setBranches([]);
+        if (!isPaused) {
+          setBranches([]);
+        }
         setLoading(true);
         setProgress({ current: 0, total: 0 });
       };
@@ -155,8 +166,12 @@ function App() {
     };
 
     const ws = connectWebSocket();
-    return () => ws.close();
-  }, []);
+    return () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [isPaused]);
 
   // Group branches by category
   const categorizedBranches = useMemo(() => {
@@ -279,15 +294,26 @@ function App() {
   };
 
   const refresh = () => {
+    setIsPaused(false);
+    setBranches([]);
     window.location.reload();
   };
 
   const pauseAnalysis = () => {
     if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
       wsConnection.close();
+      setWsConnection(null);
       setLoading(false);
-      setStatusMessage("Analysis paused");
+      setIsPaused(true);
+      setStatusMessage(
+        "Analysis paused - " + branches.length + " branches analyzed",
+      );
     }
+  };
+
+  const resumeAnalysis = () => {
+    setIsPaused(false);
+    setStatusMessage("");
   };
 
   return (
@@ -330,6 +356,23 @@ function App() {
                 <Pause className="h-4 w-4" />
                 <span>Pause</span>
               </button>
+            ) : isPaused ? (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={resumeAnalysis}
+                  className="btn btn-primary flex items-center space-x-2"
+                >
+                  <GitBranch className="h-4 w-4" />
+                  <span>Resume</span>
+                </button>
+                <button
+                  onClick={refresh}
+                  className="btn btn-secondary flex items-center space-x-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span>Restart</span>
+                </button>
+              </div>
             ) : (
               <button
                 onClick={refresh}
