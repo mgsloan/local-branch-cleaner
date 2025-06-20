@@ -223,31 +223,26 @@ class BranchAnalyzer:
             return result.stdout.strip()
         return None
 
-    def _normalize_diff(self, diff_text: str) -> str:
-        """Normalize a diff by removing index lines and adjusting line numbers"""
-        lines = diff_text.split('\n')
-        normalized = []
+    def _get_patch_id(self, base: str, branch: str) -> Optional[str]:
+        """Get a patch ID for a diff, which is stable across rebase/cherry-pick"""
+        # Use git patch-id to get a stable identifier for the patch content
+        diff_result = self._run_command(["git", "diff", base, branch])
+        if diff_result.returncode != 0:
+            return None
 
-        for line in lines:
-            # Skip index lines
-            if line.startswith('index '):
-                continue
-            # Skip diff header lines
-            if line.startswith('diff --git'):
-                continue
-            # Normalize @@ lines by removing line numbers
-            if line.startswith('@@'):
-                # Extract just the function context if present
-                parts = line.split('@@')
-                if len(parts) >= 3:
-                    # Keep the @@ markers and function context, but not line numbers
-                    normalized.append('@@ normalized @@' + parts[2])
-                else:
-                    normalized.append('@@ normalized @@')
-            else:
-                normalized.append(line)
+        # Pipe the diff through git patch-id
+        patch_id_result = subprocess.run(
+            ["git", "patch-id", "--stable"],
+            input=diff_result.stdout,
+            cwd=self.repo_path,
+            capture_output=True,
+            text=True
+        )
 
-        return '\n'.join(normalized)
+        if patch_id_result.returncode == 0 and patch_id_result.stdout:
+            # patch-id returns "patch-id commit-id", we just want the patch-id
+            return patch_id_result.stdout.split()[0]
+        return None
 
     def _compare_branch_with_merged_pr(self, branch: str, pr_number: int) -> tuple[bool, Optional[DiffStats]]:
         """Compare branch content with what was merged in the PR"""
@@ -262,16 +257,20 @@ class BranchAnalyzer:
 
         merge_base = merge_base_result.stdout.strip()
 
-        # Get diffs
-        branch_diff = self._run_command(["git", "diff", merge_base, branch])
-        pr_diff = self._run_command(["git", "diff", f"{merge_commit}^1", merge_commit])
+        # Use patch-id to compare the actual patch content
+        branch_patch_id = self._get_patch_id(merge_base, branch)
+        pr_patch_id = self._get_patch_id(f"{merge_commit}^1", merge_commit)
 
-        # Normalize diffs to ignore index and line number changes
-        normalized_branch = self._normalize_diff(branch_diff.stdout)
-        normalized_pr = self._normalize_diff(pr_diff.stdout)
-
-        # Compare normalized diffs
-        diffs_match = normalized_branch == normalized_pr
+        # If we couldn't get patch IDs, fall back to direct diff
+        if not branch_patch_id or not pr_patch_id:
+            logger.warning(f"Could not get patch IDs for branch {branch}, falling back to diff comparison")
+            # Use git's own diff comparison
+            branch_diff = self._run_command(["git", "diff", "--no-index", "--no-prefix", "-w", merge_base, branch])
+            pr_diff = self._run_command(["git", "diff", "--no-index", "--no-prefix", "-w", f"{merge_commit}^1", merge_commit])
+            diffs_match = branch_diff.stdout == pr_diff.stdout
+        else:
+            # Compare patch IDs
+            diffs_match = branch_patch_id == pr_patch_id
 
         # Get diff stats if there are differences
         stats = None
@@ -492,6 +491,11 @@ async def websocket_branches(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection established")
 
+    # State variables
+    is_paused = False
+    analyzed_branches = set()
+    branch_results = []
+
     try:
         # Get analyzer
         analyzer = get_analyzer()
@@ -522,52 +526,93 @@ async def websocket_branches(websocket: WebSocket):
             "message": f"Found {total} local branches to analyze"
         })
 
+        # Create a task for handling client messages
+        async def handle_client_messages():
+            nonlocal is_paused
+            try:
+                while True:
+                    message = await websocket.receive_json()
+                    if message.get("type") == "pause":
+                        is_paused = True
+                        logger.info("Analysis paused by client")
+                    elif message.get("type") == "resume":
+                        is_paused = False
+                        logger.info("Analysis resumed by client")
+            except WebSocketDisconnect:
+                pass
+
+        # Start client message handler
+        message_task = asyncio.create_task(handle_client_messages())
+
         # Analyze branches and stream results
-        for i, branch in enumerate(branches):
-            # Check if client is still connected
-            if websocket.client_state.value != 1:  # 1 = WebSocketState.CONNECTED
-                logger.info("WebSocket disconnected, stopping analysis")
-                break
+        try:
+            for i, branch in enumerate(branches):
+                # If paused, wait
+                while is_paused:
+                    await websocket.send_json({
+                        "type": "paused",
+                        "current": len(analyzed_branches),
+                        "total": total
+                    })
+                    await asyncio.sleep(0.5)
 
-            await websocket.send_json({
-                "type": "progress",
-                "current": i + 1,
-                "total": total,
-                "branch": branch
-            })
+                # Skip already analyzed branches (for resume)
+                if branch in analyzed_branches:
+                    continue
 
-            # Analyze branch
-            branch_info = await analyzer.analyze_branch(branch)
+                await websocket.send_json({
+                    "type": "progress",
+                    "current": len(analyzed_branches) + 1,
+                    "total": total,
+                    "branch": branch
+                })
 
-            # Send branch data
-            # Convert datetime to ISO format string for JSON serialization
-            branch_data = branch_info.dict()
-            if branch_data.get('last_commit_date'):
-                branch_data['last_commit_date'] = branch_data['last_commit_date'].isoformat()
+                # Analyze branch
+                branch_info = await analyzer.analyze_branch(branch)
+                analyzed_branches.add(branch)
 
-            await websocket.send_json({
-                "type": "branch",
-                "data": branch_data
-            })
+                # Send branch data
+                # Convert datetime to ISO format string for JSON serialization
+                branch_data = branch_info.dict()
+                if branch_data.get('last_commit_date'):
+                    branch_data['last_commit_date'] = branch_data['last_commit_date'].isoformat()
 
-            # Small delay to prevent overwhelming the client
-            await asyncio.sleep(0.1)
+                await websocket.send_json({
+                    "type": "branch",
+                    "data": branch_data
+                })
 
-        # Send completion only if we finished all branches
-        if websocket.client_state.value == 1:
+                # Store result for potential resume
+                branch_results.append(branch_data)
+
+                # Small delay to prevent overwhelming the client
+                await asyncio.sleep(0.1)
+
+            # Send completion when all branches are analyzed
             await websocket.send_json({
                 "type": "complete",
                 "total": total
             })
 
+        finally:
+            # Cancel message handler task
+            message_task.cancel()
+            try:
+                await message_task
+            except asyncio.CancelledError:
+                pass
+
     except WebSocketDisconnect:
-        logger.info("WebSocket disconnected")
+        logger.info("WebSocket disconnected by client")
     except Exception as e:
         logger.error(f"WebSocket error: {e}", exc_info=True)
-        await websocket.send_json({
-            "type": "error",
-            "message": str(e)
-        })
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": str(e)
+            })
+        except:
+            pass
         await websocket.close()
 
 

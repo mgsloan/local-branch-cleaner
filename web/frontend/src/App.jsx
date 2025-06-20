@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import axios from "axios";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -91,28 +97,19 @@ function App() {
   });
   const [statusMessage, setStatusMessage] = useState("");
   const [repoInfo, setRepoInfo] = useState(null);
-  const [wsConnection, setWsConnection] = useState(null);
+  const wsRef = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [pausedAt, setPausedAt] = useState(0);
 
   // WebSocket connection for streaming branch data
   useEffect(() => {
-    // Skip if paused or already connected
-    if (
-      isPaused ||
-      (wsConnection && wsConnection.readyState === WebSocket.OPEN)
-    ) {
-      return;
-    }
-
     const connectWebSocket = () => {
       const ws = new WebSocket(WS_URL);
-      setWsConnection(ws);
+      wsRef.current = ws;
 
       ws.onopen = () => {
         console.log("WebSocket connected");
-        if (!isPaused) {
-          setBranches([]);
-        }
+        setBranches([]);
         setLoading(true);
         setProgress({ current: 0, total: 0 });
       };
@@ -140,12 +137,26 @@ function App() {
           case "complete":
             setLoading(false);
             setStatusMessage("");
+            setIsPaused(false);
+            setPausedAt(0);
             break;
 
           case "error":
             console.error("WebSocket error:", data.message);
             setLoading(false);
             setStatusMessage(`Error: ${data.message}`);
+            break;
+
+          case "ping":
+            // Ignore ping messages
+            break;
+
+          case "paused":
+            setIsPaused(true);
+            setPausedAt(data.current || 0);
+            setStatusMessage(
+              `Analysis paused - ${data.current} branches analyzed`,
+            );
             break;
         }
       };
@@ -158,8 +169,8 @@ function App() {
 
       ws.onclose = () => {
         console.log("WebSocket disconnected");
+        wsRef.current = null;
         setLoading(false);
-        setWsConnection(null);
       };
 
       return ws;
@@ -171,7 +182,7 @@ function App() {
         ws.close();
       }
     };
-  }, [isPaused]);
+  }, []);
 
   // Group branches by category
   const categorizedBranches = useMemo(() => {
@@ -295,25 +306,22 @@ function App() {
 
   const refresh = () => {
     setIsPaused(false);
-    setBranches([]);
+    setPausedAt(0);
     window.location.reload();
   };
 
   const pauseAnalysis = () => {
-    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
-      wsConnection.close();
-      setWsConnection(null);
-      setLoading(false);
-      setIsPaused(true);
-      setStatusMessage(
-        "Analysis paused - " + branches.length + " branches analyzed",
-      );
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "pause" }));
+      setStatusMessage("Pausing analysis...");
     }
   };
 
   const resumeAnalysis = () => {
-    setIsPaused(false);
-    setStatusMessage("");
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "resume" }));
+      setStatusMessage("Resuming analysis...");
+    }
   };
 
   return (
@@ -358,6 +366,9 @@ function App() {
               </button>
             ) : isPaused ? (
               <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Paused at {pausedAt} branches
+                </span>
                 <button
                   onClick={resumeAnalysis}
                   className="btn btn-primary flex items-center space-x-2"
