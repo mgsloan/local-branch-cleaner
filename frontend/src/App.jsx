@@ -438,9 +438,9 @@ function App() {
   ]);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+      <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 flex-shrink-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -485,7 +485,7 @@ function App() {
 
       {/* Status Bar */}
       {loading && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800">
+        <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 flex-shrink-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -511,7 +511,7 @@ function App() {
       )}
 
       {/* Toolbar */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -574,150 +574,155 @@ function App() {
       </div>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {Object.entries(BRANCH_CATEGORIES).map(
-          ([categoryKey, categoryInfo]) => {
-            const branchesInCategory = categorizedBranches[categoryKey] || [];
-            if (branchesInCategory.length === 0) return null;
+      <main className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 h-full">
+          {Object.entries(BRANCH_CATEGORIES).map(
+            ([categoryKey, categoryInfo]) => {
+              const branchesInCategory = categorizedBranches[categoryKey] || [];
+              if (branchesInCategory.length === 0) return null;
 
-            const isExpanded = expandedCategories.has(categoryKey);
-            const CategoryIcon = categoryInfo.icon;
+              const isExpanded = expandedCategories.has(categoryKey);
+              const CategoryIcon = categoryInfo.icon;
 
-            return (
-              <div key={categoryKey} className="mb-6">
-                {/* Category Header */}
-                <div
-                  className={`card p-4 cursor-pointer ${categoryInfo.bgColor} ${categoryInfo.borderColor}`}
-                  onClick={() => toggleCategory(categoryKey)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      {isExpanded ? (
-                        <ChevronDown className="h-5 w-5" />
-                      ) : (
-                        <ChevronRight className="h-5 w-5" />
-                      )}
-                      <CategoryIcon
-                        className={`h-5 w-5 ${categoryInfo.color}`}
-                      />
-                      <h2 className="text-lg font-semibold">
-                        {categoryInfo.title}
-                      </h2>
-                      <span className="badge bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                        {branchesInCategory.length}
-                      </span>
-                    </div>
-                    {isExpanded && (
-                      <div
-                        className="flex items-center space-x-2"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          onClick={() => selectAllInCategory(categoryKey)}
-                          className="text-sm text-blue-600 hover:text-blue-800"
-                        >
-                          Select All
-                        </button>
-                        <span className="text-gray-400">|</span>
-                        <button
-                          onClick={() => deselectAllInCategory(categoryKey)}
-                          className="text-sm text-blue-600 hover:text-blue-800"
-                        >
-                          Deselect All
-                        </button>
+              return (
+                <div key={categoryKey} className="mb-6">
+                  {/* Category Header */}
+                  <div
+                    className={`card p-4 cursor-pointer ${categoryInfo.bgColor} ${categoryInfo.borderColor}`}
+                    onClick={() => toggleCategory(categoryKey)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        {isExpanded ? (
+                          <ChevronDown className="h-5 w-5" />
+                        ) : (
+                          <ChevronRight className="h-5 w-5" />
+                        )}
+                        <CategoryIcon
+                          className={`h-5 w-5 ${categoryInfo.color}`}
+                        />
+                        <h2 className="text-lg font-semibold">
+                          {categoryInfo.title}
+                        </h2>
+                        <span className="badge bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                          {branchesInCategory.length}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 ml-8">
-                    {categoryInfo.description}
-                  </p>
-                </div>
-
-                {/* Branches in Category */}
-                {isExpanded && (
-                  <div className="mt-2 space-y-2">
-                    {branchesInCategory.map((branch, index) => {
-                      const globalIndex = visibleBranches.findIndex(
-                        (b) => b.name === branch.name,
-                      );
-                      return (
-                        <div key={branch.name} data-branch-card>
-                          <BranchCard
-                            branch={branch}
-                            isSelected={selectedBranches.has(branch.name)}
-                            isHighlighted={globalIndex === selectedBranchIndex}
-                            onToggleSelect={() =>
-                              toggleBranchSelection(branch.name)
-                            }
-                            onDelete={(includeRemote) =>
-                              handleDelete([branch.name], includeRemote)
-                            }
-                            onViewDiff={(prNumber) =>
-                              viewDiff(branch, prNumber)
-                            }
-                          />
+                      {isExpanded && (
+                        <div
+                          className="flex items-center space-x-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => selectAllInCategory(categoryKey)}
+                            className="text-sm text-blue-600 hover:text-blue-800"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-gray-400">|</span>
+                          <button
+                            onClick={() => deselectAllInCategory(categoryKey)}
+                            className="text-sm text-blue-600 hover:text-blue-800"
+                          >
+                            Deselect All
+                          </button>
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 ml-8">
+                      {categoryInfo.description}
+                    </p>
                   </div>
-                )}
-              </div>
-            );
-          },
-        )}
 
-        {/* Empty State */}
-        {!loading && branches.length === 0 && (
-          <div className="text-center py-12">
-            <GitBranch className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-              No branches found
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">
-              All your branches are up to date or there are no local branches to
-              analyze.
-            </p>
-            {repoInfo && (
-              <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-                <p>
-                  Repository: <span className="font-mono">{repoInfo.path}</span>
-                </p>
-                <p>
-                  Main branch:{" "}
-                  <span className="font-mono">{repoInfo.main_branch}</span>
-                </p>
-                {repoInfo.total_branches === 0 ? (
-                  <p className="mt-2 text-yellow-600 dark:text-yellow-400">
-                    No branches found in this repository. Make sure you're in
-                    the correct directory.
+                  {/* Branches in Category */}
+                  {isExpanded && (
+                    <div className="mt-2 space-y-2">
+                      {branchesInCategory.map((branch, index) => {
+                        const globalIndex = visibleBranches.findIndex(
+                          (b) => b.name === branch.name,
+                        );
+                        return (
+                          <div key={branch.name} data-branch-card>
+                            <BranchCard
+                              branch={branch}
+                              isSelected={selectedBranches.has(branch.name)}
+                              isHighlighted={
+                                globalIndex === selectedBranchIndex
+                              }
+                              onToggleSelect={() =>
+                                toggleBranchSelection(branch.name)
+                              }
+                              onDelete={(includeRemote) =>
+                                handleDelete([branch.name], includeRemote)
+                              }
+                              onViewDiff={(prNumber) =>
+                                viewDiff(branch, prNumber)
+                              }
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            },
+          )}
+
+          {/* Empty State */}
+          {!loading && branches.length === 0 && (
+            <div className="text-center py-12">
+              <GitBranch className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                No branches found
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">
+                All your branches are up to date or there are no local branches
+                to analyze.
+              </p>
+              {repoInfo && (
+                <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                  <p>
+                    Repository:{" "}
+                    <span className="font-mono">{repoInfo.path}</span>
                   </p>
-                ) : (
-                  <p>Total branches found: {repoInfo.total_branches}</p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                  <p>
+                    Main branch:{" "}
+                    <span className="font-mono">{repoInfo.main_branch}</span>
+                  </p>
+                  {repoInfo.total_branches === 0 ? (
+                    <p className="mt-2 text-yellow-600 dark:text-yellow-400">
+                      No branches found in this repository. Make sure you're in
+                      the correct directory.
+                    </p>
+                  ) : (
+                    <p>Total branches found: {repoInfo.total_branches}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* Keyboard shortcuts help */}
-        <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
-          <span className="font-medium">Keyboard shortcuts:</span>{" "}
-          <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
-            j/k
-          </kbd>{" "}
-          navigate{" "}
-          <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
-            space/x
-          </kbd>{" "}
-          select{" "}
-          <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
-            enter
-          </kbd>{" "}
-          diff{" "}
-          <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
-            d
-          </kbd>{" "}
-          delete
+          {/* Keyboard shortcuts help */}
+          <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+            <span className="font-medium">Keyboard shortcuts:</span>{" "}
+            <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+              j/k
+            </kbd>{" "}
+            navigate{" "}
+            <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+              space/x
+            </kbd>{" "}
+            select{" "}
+            <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+              enter
+            </kbd>{" "}
+            diff{" "}
+            <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+              d
+            </kbd>{" "}
+            delete
+          </div>
         </div>
       </main>
 
