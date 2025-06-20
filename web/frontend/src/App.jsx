@@ -26,7 +26,6 @@ import {
   XCircle,
   GitCommit,
   ExternalLink,
-  Pause,
 } from "lucide-react";
 import DiffViewer from "./components/DiffViewer";
 import BranchCard from "./components/BranchCard";
@@ -98,8 +97,6 @@ function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [repoInfo, setRepoInfo] = useState(null);
   const wsRef = useRef(null);
-  const [isPaused, setIsPaused] = useState(false);
-  const [pausedAt, setPausedAt] = useState(0);
 
   // WebSocket connection for streaming branch data
   useEffect(() => {
@@ -112,8 +109,6 @@ function App() {
         setBranches([]);
         setLoading(true);
         setProgress({ current: 0, total: 0 });
-        setIsPaused(false);
-        setPausedAt(0);
       };
 
       ws.onmessage = (event) => {
@@ -152,8 +147,6 @@ function App() {
           case "complete":
             setLoading(false);
             setStatusMessage("");
-            setIsPaused(false);
-            setPausedAt(0);
             break;
 
           case "error":
@@ -164,14 +157,6 @@ function App() {
 
           case "ping":
             // Ignore ping messages
-            break;
-
-          case "paused":
-            setIsPaused(true);
-            setPausedAt(data.current || 0);
-            setStatusMessage(
-              `Analysis paused - ${data.current} branches analyzed`,
-            );
             break;
         }
       };
@@ -337,30 +322,7 @@ function App() {
   };
 
   const refresh = () => {
-    setIsPaused(false);
-    setPausedAt(0);
     window.location.reload();
-  };
-
-  const pauseAnalysis = () => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log("Sending pause message to backend");
-      wsRef.current.send(JSON.stringify({ type: "pause" }));
-      setStatusMessage("Pausing analysis...");
-    } else {
-      console.error("WebSocket not open, cannot pause");
-    }
-  };
-
-  const resumeAnalysis = () => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log("Sending resume message to backend");
-      wsRef.current.send(JSON.stringify({ type: "resume" }));
-      setStatusMessage("Resuming analysis...");
-      setIsPaused(false);
-    } else {
-      console.error("WebSocket not open, cannot resume");
-    }
   };
 
   return (
@@ -395,43 +357,16 @@ function App() {
                 </div>
               </div>
             )}
-            {loading ? (
-              <button
-                onClick={pauseAnalysis}
-                className="btn btn-secondary flex items-center space-x-2"
-              >
-                <Pause className="h-4 w-4" />
-                <span>Pause</span>
-              </button>
-            ) : isPaused ? (
-              <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  Paused at {pausedAt} branches
-                </span>
-                <button
-                  onClick={resumeAnalysis}
-                  className="btn btn-primary flex items-center space-x-2"
-                >
-                  <GitBranch className="h-4 w-4" />
-                  <span>Resume</span>
-                </button>
-                <button
-                  onClick={refresh}
-                  className="btn btn-secondary flex items-center space-x-2"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  <span>Restart</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={refresh}
-                className="btn btn-secondary flex items-center space-x-2"
-              >
-                <RefreshCw className="h-4 w-4" />
-                <span>Refresh</span>
-              </button>
-            )}
+            <button
+              onClick={refresh}
+              className="btn btn-secondary flex items-center space-x-2"
+              disabled={loading}
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              />
+              <span>Refresh</span>
+            </button>
           </div>
         </div>
       </header>

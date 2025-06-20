@@ -769,26 +769,7 @@ async def websocket_branches(websocket: WebSocket):
     logger.info("WebSocket connection established")
 
     # State variables
-    is_paused = False
     analyzed_branches = set()
-    message_queue = asyncio.Queue()
-
-    async def receive_messages():
-        """Receive messages from client and put them in the queue"""
-        try:
-            while True:
-                message = await websocket.receive_json()
-                logger.info(f"Received message from client: {message}")
-                await message_queue.put(message)
-        except WebSocketDisconnect:
-            logger.info("WebSocket disconnected in receive_messages")
-            await message_queue.put({"type": "disconnect"})
-        except Exception as e:
-            logger.error(f"Error receiving message: {e}")
-            await message_queue.put({"type": "error", "error": str(e)})
-
-    # Start message receiver
-    receive_task = asyncio.create_task(receive_messages())
 
     try:
         # Get analyzer
@@ -820,64 +801,8 @@ async def websocket_branches(websocket: WebSocket):
             "message": f"Found {total} local branches to analyze"
         })
 
-        async def check_messages_and_pause():
-            """Check message queue and handle pause state"""
-            nonlocal is_paused
-
-            # Process any pending messages
-            while not message_queue.empty():
-                try:
-                    message = message_queue.get_nowait()
-                    logger.info(f"Processing message from queue: {message}")
-                    if message.get("type") == "pause":
-                        is_paused = True
-                        logger.info(f"Analysis paused by client")
-                    elif message.get("type") == "resume":
-                        is_paused = False
-                        logger.info(f"Analysis resumed by client")
-                    elif message.get("type") == "disconnect":
-                        logger.info("Client disconnected")
-                        return False
-                    elif message.get("type") == "error":
-                        logger.error(f"Error in message queue: {message.get('error')}")
-                        return False
-                except asyncio.QueueEmpty:
-                    break
-
-            # Handle pause state
-            if is_paused:
-                logger.info(f"In pause state")
-                await websocket.send_json({
-                    "type": "paused",
-                    "current": len(analyzed_branches),
-                    "total": total
-                })
-
-                # Wait while paused
-                while is_paused:
-                    try:
-                        message = await asyncio.wait_for(message_queue.get(), timeout=0.5)
-                        if message.get("type") == "resume":
-                            is_paused = False
-                            logger.info(f"Resuming from pause")
-                            break
-                        elif message.get("type") == "disconnect":
-                            logger.info("Client disconnected during pause")
-                            return False
-                    except asyncio.TimeoutError:
-                        await websocket.send_json({
-                            "type": "paused",
-                            "current": len(analyzed_branches),
-                            "total": total
-                        })
-
-            return True
-
         # Analyze branches and stream results
         for i, branch in enumerate(branches):
-            # Check messages and handle pause before each branch
-            if not await check_messages_and_pause():
-                return
 
             # Skip already analyzed branches (for resume)
             if branch in analyzed_branches:
@@ -895,10 +820,6 @@ async def websocket_branches(websocket: WebSocket):
             # Run the synchronous analyze_branch in a thread pool
             loop = asyncio.get_event_loop()
             branch_info = await loop.run_in_executor(None, analyzer.analyze_branch, branch)
-
-            # Check for pause immediately after analysis completes
-            if not await check_messages_and_pause():
-                return
 
             analyzed_branches.add(branch)
 
@@ -934,13 +855,6 @@ async def websocket_branches(websocket: WebSocket):
         except:
             pass
     finally:
-        # Cancel the receive task
-        receive_task.cancel()
-        try:
-            await receive_task
-        except asyncio.CancelledError:
-            pass
-
         # Ensure websocket is closed
         if websocket.client_state.value == 1:  # CONNECTED
             await websocket.close()
