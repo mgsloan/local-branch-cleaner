@@ -1,15 +1,16 @@
-import React from 'react'
-import { AlertTriangle, X } from 'lucide-react'
+import React from "react";
+import { AlertTriangle, X, GitBranch, Cloud } from "lucide-react";
 
 const ConfirmDialog = ({
   open,
   branches,
+  branchesWithRemotes,
   includeRemote,
   onConfirm,
   onCancel,
-  onToggleRemote
+  onToggleRemote,
 }) => {
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -29,21 +30,28 @@ const ConfirmDialog = ({
               </div>
               <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
                 <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-white">
-                  Delete {branches.length === 1 ? 'Branch' : `${branches.length} Branches`}
+                  Delete{" "}
+                  {branches.length === 1
+                    ? "Branch"
+                    : `${branches.length} Branches`}
                 </h3>
                 <div className="mt-2">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Are you sure you want to delete {branches.length === 1 ? 'this branch' : 'these branches'}?
+                    Are you sure you want to delete{" "}
+                    {branches.length === 1 ? "this branch" : "these branches"}?
                     This action cannot be undone.
                   </p>
                   <div className="mt-3 space-y-1">
-                    {branches.map(branch => (
-                      <div key={branch} className="text-sm font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                    {branches.map((branch) => (
+                      <div
+                        key={branch}
+                        className="text-sm font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded"
+                      >
                         {branch}
                       </div>
                     ))}
                   </div>
-                  {branches.length > 0 && (
+                  {branchesWithRemotes.length > 0 && (
                     <div className="mt-4">
                       <label className="flex items-center space-x-2 text-sm">
                         <input
@@ -53,9 +61,28 @@ const ConfirmDialog = ({
                           className="h-4 w-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
                         />
                         <span className="text-gray-700 dark:text-gray-300">
-                          Also delete remote {branches.length === 1 ? 'branch' : 'branches'}
+                          Also delete remote{" "}
+                          {branchesWithRemotes.length === 1
+                            ? "branch"
+                            : "branches"}
                         </span>
                       </label>
+                      {includeRemote && (
+                        <div className="mt-2 ml-6 space-y-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
+                            <Cloud className="h-3 w-3" />
+                            <span>Remote branches to delete:</span>
+                          </p>
+                          {branchesWithRemotes.map((branch) => (
+                            <div
+                              key={branch}
+                              className="text-xs font-mono bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-2 py-0.5 rounded inline-block mr-2"
+                            >
+                              origin/{branch}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -81,7 +108,7 @@ const ConfirmDialog = ({
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default ConfirmDialog
+export default ConfirmDialog;

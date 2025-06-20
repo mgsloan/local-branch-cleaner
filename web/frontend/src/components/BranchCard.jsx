@@ -1,5 +1,5 @@
-import React from 'react'
-import { formatDistanceToNow } from 'date-fns'
+import React from "react";
+import { formatDistanceToNow } from "date-fns";
 import {
   GitBranch,
   GitMerge,
@@ -11,64 +11,53 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  User
-} from 'lucide-react'
+  User,
+} from "lucide-react";
 
 const BranchCard = ({
   branch,
   isSelected,
   onToggleSelect,
   onDelete,
-  onViewDiff
+  onViewDiff,
 }) => {
   const getPRIcon = (state) => {
     switch (state) {
-      case 'MERGED':
-        return <GitMerge className="h-4 w-4 text-github-merged" />
-      case 'OPEN':
-        return <GitPullRequest className="h-4 w-4 text-github-open" />
-      case 'CLOSED':
-        return <XCircle className="h-4 w-4 text-github-closed" />
+      case "MERGED":
+        return <GitMerge className="h-4 w-4 text-github-merged" />;
+      case "OPEN":
+        return <GitPullRequest className="h-4 w-4 text-github-open" />;
+      case "CLOSED":
+        return <XCircle className="h-4 w-4 text-github-closed" />;
       default:
-        return <GitBranch className="h-4 w-4 text-gray-400" />
+        return <GitBranch className="h-4 w-4 text-gray-400" />;
     }
-  }
+  };
 
   const getStatusIcon = () => {
     switch (branch.status) {
-      case 'safe_to_delete':
-        return <CheckCircle2 className="h-5 w-5 text-green-600" />
-      case 'review_required':
-        return <AlertCircle className="h-5 w-5 text-yellow-600" />
-      case 'closed_pr':
-        return <XCircle className="h-5 w-5 text-red-600" />
-      case 'active':
-        return <GitPullRequest className="h-5 w-5 text-blue-600" />
+      case "safe_to_delete":
+        return <CheckCircle2 className="h-5 w-5 text-green-600" />;
+      case "review_required":
+        return <AlertCircle className="h-5 w-5 text-yellow-600" />;
+      case "closed_pr":
+        return <XCircle className="h-5 w-5 text-red-600" />;
+      case "active":
+        return <GitPullRequest className="h-5 w-5 text-blue-600" />;
       default:
-        return <GitBranch className="h-5 w-5 text-gray-400" />
+        return <GitBranch className="h-5 w-5 text-gray-400" />;
     }
-  }
+  };
 
   const handleDeleteClick = () => {
-    // Check if there's a remote branch
-    const hasRemote = branch.prs && branch.prs.length > 0
-    if (hasRemote) {
-      // Show dialog to ask about remote deletion
-      const includeRemote = window.confirm(
-        `Delete remote branch '${branch.name}' as well?\n\n` +
-        'Click OK to delete both local and remote branches.\n' +
-        'Click Cancel to delete only the local branch.'
-      )
-      onDelete(includeRemote)
-    } else {
-      onDelete(false)
-    }
-  }
+    // Always use the custom confirmation dialog
+    onDelete(false);
+  };
 
-  const mergedPR = branch.prs?.find(pr => pr.state === 'MERGED')
+  const mergedPR = branch.prs?.find((pr) => pr.state === "MERGED");
 
   return (
-    <div className={`card p-4 ${isSelected ? 'ring-2 ring-blue-500' : ''}`}>
+    <div className={`card p-4 ${isSelected ? "ring-2 ring-blue-500" : ""}`}>
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-3 flex-1">
           {/* Selection Checkbox */}
@@ -80,9 +69,7 @@ const BranchCard = ({
           />
 
           {/* Status Icon */}
-          <div className="flex-shrink-0 mt-0.5">
-            {getStatusIcon()}
-          </div>
+          <div className="flex-shrink-0 mt-0.5">{getStatusIcon()}</div>
 
           {/* Branch Info */}
           <div className="flex-1 min-w-0">
@@ -100,8 +87,11 @@ const BranchCard = ({
             {/* PR List */}
             {branch.prs && branch.prs.length > 0 && (
               <div className="mt-2 space-y-1">
-                {branch.prs.map(pr => (
-                  <div key={pr.number} className="flex items-center space-x-2 text-sm">
+                {branch.prs.map((pr) => (
+                  <div
+                    key={pr.number}
+                    className="flex items-center space-x-2 text-sm"
+                  >
                     {getPRIcon(pr.state)}
                     <a
                       href={pr.url}
@@ -130,7 +120,8 @@ const BranchCard = ({
                   -{branch.diff_stats.deletions}
                 </span>
                 <span>
-                  {branch.diff_stats.files_changed} {branch.diff_stats.files_changed === 1 ? 'file' : 'files'}
+                  {branch.diff_stats.files_changed}{" "}
+                  {branch.diff_stats.files_changed === 1 ? "file" : "files"}
                 </span>
               </div>
             )}
@@ -141,7 +132,9 @@ const BranchCard = ({
                 <div className="flex items-center space-x-1">
                   <Clock className="h-3 w-3" />
                   <span>
-                    {formatDistanceToNow(new Date(branch.last_commit_date), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(branch.last_commit_date), {
+                      addSuffix: true,
+                    })}
                   </span>
                 </div>
               )}
@@ -183,7 +176,7 @@ const BranchCard = ({
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default BranchCard
+export default BranchCard;

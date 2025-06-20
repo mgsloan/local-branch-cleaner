@@ -443,6 +443,11 @@ class BranchAnalyzer:
 
         return True
 
+    def check_remote_branch_exists(self, branch: str) -> bool:
+        """Check if a remote branch exists"""
+        result = self._run_command(["git", "ls-remote", "--heads", "origin", branch])
+        return result.returncode == 0 and bool(result.stdout.strip())
+
     def _normalize_diff_for_display(self, diff_text: str) -> str:
         """Normalize a diff for display by removing index lines but keeping line numbers intact"""
         lines = diff_text.split('\n')
@@ -572,7 +577,12 @@ class BranchAnalyzer:
             "branch_diff": normalized_branch_diff,
             "pr_diff": normalized_pr_diff,
             "branch_files": filtered_branch_files,
-            "pr_files": filtered_pr_files
+            "pr_files": filtered_pr_files,
+            "git_commands": {
+                "branch_merge_base": merge_base,
+                "pr_merge_base": pr_merge_base,
+                "merge_commit": merge_commit
+            }
         }
 
     def _parse_file_status(self, output: str) -> List[Dict[str, str]]:
@@ -825,6 +835,18 @@ async def get_branch_diff(branch_name: str, pr_number: int):
     except Exception as e:
         logger.error(f"Failed to get diff for branch {branch_name}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/branch/{branch_name}/remote-exists")
+async def check_remote_branch(branch_name: str):
+    """Check if a remote branch exists"""
+    try:
+        analyzer = get_analyzer()
+        exists = analyzer.check_remote_branch_exists(branch_name)
+        return {"exists": exists, "branch": branch_name}
+    except Exception as e:
+        logger.error(f"Failed to check remote branch {branch_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/health")

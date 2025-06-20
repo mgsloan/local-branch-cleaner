@@ -262,13 +262,30 @@ function App() {
     });
   };
 
-  const handleDelete = (branchNames, includeRemote = false) => {
+  const handleDelete = async (branchNames, includeRemote = false) => {
     const branchesToDelete = Array.isArray(branchNames)
       ? branchNames
       : [branchNames];
+
+    // Check which branches have remotes
+    const branchesWithRemotes = [];
+    for (const branch of branchesToDelete) {
+      try {
+        const response = await axios.get(
+          `${API_BASE_URL}/branch/${encodeURIComponent(branch)}/remote-exists`,
+        );
+        if (response.data.exists) {
+          branchesWithRemotes.push(branch);
+        }
+      } catch (error) {
+        console.error(`Failed to check remote for ${branch}:`, error);
+      }
+    }
+
     setConfirmDialog({
       open: true,
       branches: branchesToDelete,
+      branchesWithRemotes,
       includeRemote,
     });
   };
@@ -633,10 +650,16 @@ function App() {
       <ConfirmDialog
         open={confirmDialog.open}
         branches={confirmDialog.branches}
+        branchesWithRemotes={confirmDialog.branchesWithRemotes || []}
         includeRemote={confirmDialog.includeRemote}
         onConfirm={confirmDelete}
         onCancel={() =>
-          setConfirmDialog({ open: false, branches: [], includeRemote: false })
+          setConfirmDialog({
+            open: false,
+            branches: [],
+            branchesWithRemotes: [],
+            includeRemote: false,
+          })
         }
         onToggleRemote={(value) =>
           setConfirmDialog((prev) => ({ ...prev, includeRemote: value }))

@@ -13,12 +13,15 @@ import {
   FilePlus,
   FileMinus,
   FileEdit,
+  Terminal,
+  Copy,
 } from "lucide-react";
 
 const DiffViewer = ({ data, onClose }) => {
   const [viewMode, setViewMode] = useState("split"); // 'split' or 'unified'
   const [expandedFiles, setExpandedFiles] = useState(new Set());
   const [selectedFile, setSelectedFile] = useState(null);
+  const [showCommands, setShowCommands] = useState(false);
 
   // Handle browser back button
   React.useEffect(() => {
@@ -157,6 +160,15 @@ const DiffViewer = ({ data, onClose }) => {
     return fileDiff ? fileDiff.diff : "";
   };
 
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const gitCommands = {
+    branch: `git diff ${data.git_commands?.branch_merge_base || '<merge-base>'}..${data.branch.name}`,
+    pr: `git diff ${data.git_commands?.pr_merge_base || '<pr-parent>'}..${data.git_commands?.merge_commit || '<merge-commit>'}`,
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black bg-opacity-50">
       <div className="absolute inset-4 flex flex-col bg-white dark:bg-gray-900 rounded-lg shadow-xl">
@@ -172,6 +184,14 @@ const DiffViewer = ({ data, onClose }) => {
             </h2>
           </div>
           <div className="flex items-center space-x-4">
+            {/* Git Commands Toggle */}
+            <button
+              onClick={() => setShowCommands(!showCommands)}
+              className="flex items-center space-x-2 px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
+            >
+              <Terminal className="h-4 w-4" />
+              <span className="text-sm">Git Commands</span>
+            </button>
             {/* View Mode Toggle */}
             <div className="flex items-center space-x-2">
               <button
@@ -201,6 +221,47 @@ const DiffViewer = ({ data, onClose }) => {
             </button>
           </div>
         </div>
+
+        {/* Git Commands Section */}
+        {showCommands && (
+          <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Git Commands to Generate These Diffs</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Merged PR Diff:</p>
+                  <div className="flex items-center space-x-2">
+                    <code className="flex-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 font-mono">
+                      {gitCommands.pr}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(gitCommands.pr)}
+                      className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                      title="Copy to clipboard"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Branch Diff:</p>
+                  <div className="flex items-center space-x-2">
+                    <code className="flex-1 text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 font-mono">
+                      {gitCommands.branch}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(gitCommands.branch)}
+                      className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                      title="Copy to clipboard"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex flex-1 overflow-hidden">
