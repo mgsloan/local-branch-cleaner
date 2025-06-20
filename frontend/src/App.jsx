@@ -329,25 +329,16 @@ function App() {
     });
   };
 
-  const handleDelete = async (branchNames, includeRemote = false) => {
+  const handleDelete = (branchNames, includeRemote = false) => {
     const branchesToDelete = Array.isArray(branchNames)
       ? branchNames
       : [branchNames];
 
-    // Check which branches have remotes
-    const branchesWithRemotes = [];
-    for (const branch of branchesToDelete) {
-      try {
-        const response = await axios.get(
-          `${API_BASE_URL}/branch/${encodeURIComponent(branch)}/remote-exists`,
-        );
-        if (response.data.exists) {
-          branchesWithRemotes.push(branch);
-        }
-      } catch (error) {
-        console.error(`Failed to check remote for ${branch}:`, error);
-      }
-    }
+    // Get branches with remotes from pre-fetched data
+    const branchesWithRemotes = branchesToDelete.filter((branchName) => {
+      const branch = branches.find((b) => b.name === branchName);
+      return branch && branch.has_remote_branch;
+    });
 
     setConfirmDialog({
       open: true,

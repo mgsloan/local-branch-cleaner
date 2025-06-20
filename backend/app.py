@@ -69,6 +69,7 @@ class BranchInfo(BaseModel):
     unpushed_commits: int = 0
     unpulled_commits: int = 0
     tracking_branch: Optional[str] = None
+    has_remote_branch: bool = False
     error: Optional[str] = None
 
 
@@ -464,6 +465,9 @@ class BranchAnalyzer:
             # Get tracking branch info
             tracking_branch, unpushed, unpulled = self._get_tracking_branch_info(branch)
 
+            # Check if remote branch exists
+            has_remote = self.check_remote_branch_exists(branch)
+
             # Determine status and check for differences
             status = BranchStatus.NO_PR
             has_differences = False
@@ -495,7 +499,8 @@ class BranchAnalyzer:
                 has_differences=has_differences,
                 tracking_branch=tracking_branch,
                 unpushed_commits=unpushed,
-                unpulled_commits=unpulled
+                unpulled_commits=unpulled,
+                has_remote_branch=has_remote
             )
         except Exception as e:
             return BranchInfo(
@@ -884,16 +889,6 @@ async def get_branch_diff(branch_name: str, pr_number: int):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/api/branch/{branch_name}/remote-exists")
-async def check_remote_branch(branch_name: str):
-    """Check if a remote branch exists"""
-    try:
-        analyzer = get_analyzer()
-        exists = analyzer.check_remote_branch_exists(branch_name)
-        return {"exists": exists, "branch": branch_name}
-    except Exception as e:
-        logger.error(f"Failed to check remote branch {branch_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/health")
