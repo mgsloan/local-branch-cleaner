@@ -128,12 +128,16 @@ const DiffViewer = ({ data, onClose }) => {
             }
           }, 100);
           break;
+        case "u":
+          e.preventDefault();
+          onClose();
+          break;
       }
     };
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [selectedFile, parsedDiffs.files]);
+  }, [selectedFile, parsedDiffs.files, onClose]);
 
   const getFileIcon = (status) => {
     switch (status) {
@@ -272,9 +276,13 @@ const DiffViewer = ({ data, onClose }) => {
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md flex items-center space-x-1"
+              title="Close (U)"
             >
               <X className="h-5 w-5" />
+              <kbd className="text-xs px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                U
+              </kbd>
             </button>
           </div>
         </div>
