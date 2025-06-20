@@ -20,6 +20,22 @@ const DiffViewer = ({ data, onClose }) => {
   const [expandedFiles, setExpandedFiles] = useState(new Set());
   const [selectedFile, setSelectedFile] = useState(null);
 
+  // Handle browser back button
+  React.useEffect(() => {
+    const handlePopState = (e) => {
+      e.preventDefault();
+      onClose();
+    };
+
+    // Push a new state when the viewer opens
+    window.history.pushState({ diffViewer: true }, "");
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [onClose]);
+
   // Parse the diff data
   const parsedDiffs = useMemo(() => {
     if (!data) return { files: [], hasChanges: false };
@@ -64,6 +80,13 @@ const DiffViewer = ({ data, onClose }) => {
       hasChanges: files.length > 0,
     };
   }, [data]);
+
+  // Auto-select first file when data changes
+  React.useEffect(() => {
+    if (parsedDiffs.files.length > 0 && !selectedFile) {
+      setSelectedFile(parsedDiffs.files[0].filename);
+    }
+  }, [parsedDiffs.files, selectedFile]);
 
   const getFileIcon = (status) => {
     switch (status) {
