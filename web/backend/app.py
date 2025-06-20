@@ -55,7 +55,6 @@ class PRInfo(BaseModel):
     url: Optional[str] = None
     merge_commit: Optional[str] = None
     base_ref: Optional[str] = None
-    merge_commit_sha: Optional[str] = None
 
 
 class BranchInfo(BaseModel):
@@ -140,15 +139,15 @@ class BranchAnalyzer:
 
     def _run_command(self, cmd: List[str]) -> subprocess.CompletedProcess:
         """Run a command and return the result"""
-        logger.debug(f"Running command: {' '.join(cmd)}")
+        logger.info(f"Running command: {' '.join(cmd)}")
         result = subprocess.run(cmd, cwd=self.repo_path, capture_output=True, text=True)
         if result.returncode != 0:
-            logger.debug(f"Command failed with code {result.returncode}: {result.stderr}")
+            logger.info(f"Command failed with code {result.returncode}: {result.stderr}")
         return result
 
     def _get_pr_info(self, branch: str) -> List[PRInfo]:
         """Get PR information for a branch using gh CLI"""
-        logger.debug(f"Getting PR info for branch: {branch}")
+        logger.info(f"Getting PR info for branch: {branch}")
         result = self._run_command([
             "gh", "pr", "list",
             "--head", branch,
@@ -162,7 +161,7 @@ class BranchAnalyzer:
 
         try:
             pr_data = json.loads(result.stdout)
-            logger.debug(f"Found {len(pr_data)} PRs for branch {branch}")
+            logger.info(f"Found {len(pr_data)} PRs for branch {branch}")
             prs = []
             for pr in pr_data:
                 # For merged PRs, get the full PR details to get the merge commit SHA
@@ -177,8 +176,7 @@ class BranchAnalyzer:
                     title=pr["title"],
                     url=pr.get("url"),
                     merge_commit=pr.get("mergeCommit", {}).get("oid") if isinstance(pr.get("mergeCommit"), dict) else pr.get("mergeCommit"),
-                    base_ref=pr.get("baseRefName"),
-                    merge_commit_sha=pr.get("merge_commit_sha")
+                    base_ref=pr.get("baseRefName")
                 ))
             return prs
         except (json.JSONDecodeError, KeyError) as e:
@@ -187,21 +185,24 @@ class BranchAnalyzer:
 
     def _get_pr_details(self, pr_number: int) -> Optional[Dict[str, Any]]:
         """Get detailed PR information including merge commit SHA"""
-        logger.debug(f"Getting detailed info for PR #{pr_number}")
+        logger.info(f"Getting detailed info for PR #{pr_number}")
         result = self._run_command([
             "gh", "pr", "view", str(pr_number),
-            "--json", "number,state,mergeCommit,baseRefName,mergedAt,merge_commit_sha"
+            "--json", "number,state,mergeCommit,baseRefName,mergedAt"
         ])
 
         if result.returncode != 0:
-            # Try API directly
+            # Try API directly for merge_commit_sha
             api_result = self._run_command([
-                "gh", "api", f"repos/:owner/:repo/pulls/{pr_number}",
-                "--jq", '"{merge_commit_sha: .merge_commit_sha, baseRefName: .base.ref}"'
+                "gh", "api", f"repos/:owner/:repo/pulls/{pr_number}"
             ])
             if api_result.returncode == 0:
                 try:
-                    return json.loads(api_result.stdout)
+                    data = json.loads(api_result.stdout)
+                    return {
+                        "mergeCommit": {"oid": data.get("merge_commit_sha")} if data.get("merge_commit_sha") else None,
+                        "baseRefName": data.get("base", {}).get("ref")
+                    }
                 except:
                     pass
             return None
@@ -213,27 +214,53 @@ class BranchAnalyzer:
 
     def _get_tracking_branch_info(self, branch: str) -> tuple[Optional[str], int, int]:
         """Get tracking branch and count of unpushed/unpulled commits"""
-        # Get the tracking branch
-        tracking_result = self._run_command([
-            "git", "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"
+        # Use origin/branch-name as the tracking branch
+        tracking_branch = f"origin/{branch}"
+        logger.info(f"Checking tracking branch {tracking_branch} for {branch}")
+
+        # Check if the remote branch exists using ls-remote
+        check_remote = self._run_command([
+            "git", "ls-remote", "--heads", "origin", branch
         ])
 
-        if tracking_result.returncode != 0:
-            return None, 0, 0
-
-        tracking_branch = tracking_result.stdout.strip()
+        if check_remote.returncode != 0 or not check_remote.stdout.strip():
+            # Try alternative method - check if ref exists locally
+            alt_check = self._run_command([
+                "git", "rev-parse", "--verify", "--quiet", tracking_branch
+            ])
+            if alt_check.returncode != 0:
+                # Remote branch doesn't exist
+                logger.info(f"Remote branch {tracking_branch} does not exist")
+                return None, 0, 0
 
         # Count unpushed commits (in local but not in remote)
-        unpushed_result = self._run_command([
-            "git", "rev-list", "--count", f"{tracking_branch}..{branch}"
-        ])
-        unpushed = int(unpushed_result.stdout.strip()) if unpushed_result.returncode == 0 else 0
+        unpushed_cmd = ["git", "rev-list", "--count", f"{tracking_branch}..{branch}"]
+        logger.info(f"Running unpushed check: {' '.join(unpushed_cmd)}")
+        unpushed_result = self._run_command(unpushed_cmd)
+        unpushed = 0
+        if unpushed_result.returncode == 0 and unpushed_result.stdout.strip():
+            try:
+                unpushed = int(unpushed_result.stdout.strip())
+                if unpushed > 0:
+                    logger.info(f"Branch {branch} has {unpushed} unpushed commits")
+            except ValueError:
+                logger.warning(f"Could not parse unpushed count for {branch}: {unpushed_result.stdout}")
 
         # Count unpulled commits (in remote but not in local)
-        unpulled_result = self._run_command([
-            "git", "rev-list", "--count", f"{branch}..{tracking_branch}"
-        ])
-        unpulled = int(unpulled_result.stdout.strip()) if unpulled_result.returncode == 0 else 0
+        unpulled_cmd = ["git", "rev-list", "--count", f"{branch}..{tracking_branch}"]
+        logger.info(f"Running unpulled check: {' '.join(unpulled_cmd)}")
+        unpulled_result = self._run_command(unpulled_cmd)
+        unpulled = 0
+        if unpulled_result.returncode == 0 and unpulled_result.stdout.strip():
+            try:
+                unpulled = int(unpulled_result.stdout.strip())
+                if unpulled > 0:
+                    logger.info(f"Branch {branch} has {unpulled} unpulled commits")
+            except ValueError:
+                logger.warning(f"Could not parse unpulled count for {branch}: {unpulled_result.stdout}")
+
+        if unpushed > 0 or unpulled > 0:
+            logger.info(f"Branch {branch}: {unpushed} unpushed, {unpulled} unpulled (tracking {tracking_branch})")
 
         return tracking_branch, unpushed, unpulled
 
@@ -277,12 +304,7 @@ class BranchAnalyzer:
 
     def _get_merge_commit_for_pr_info(self, pr: PRInfo) -> Optional[str]:
         """Get the merge commit for a PR using the PR info"""
-        # First try the merge_commit_sha from the API
-        if pr.merge_commit_sha:
-            logger.debug(f"Using merge_commit_sha from API for PR #{pr.number}: {pr.merge_commit_sha}")
-            return pr.merge_commit_sha
-
-        # Then try the merge_commit from the PR info
+        # Try the merge_commit from the PR info
         if pr.merge_commit:
             logger.debug(f"Using merge_commit from PR info for PR #{pr.number}: {pr.merge_commit}")
             return pr.merge_commit
@@ -396,7 +418,7 @@ class BranchAnalyzer:
         diffs_match = branch_changes == pr_changes
 
         if not diffs_match:
-            logger.debug(f"Branch {branch} has different changes than merged PR")
+            logger.info(f"Branch {branch} has different changes than merged PR")
 
         # Get diff stats if there are differences
         stats = None
@@ -501,8 +523,8 @@ class BranchAnalyzer:
                     branches.append(branch)
 
         logger.info(f"Found {len(all_branches)} total branches, {len(branches)} to analyze (excluding {self.main_branch})")
-        logger.debug(f"All branches: {all_branches}")
-        logger.debug(f"Branches to analyze: {branches}")
+        logger.info(f"All branches: {all_branches}")
+        logger.info(f"Branches to analyze: {branches}")
         return branches
 
     def get_repo_info(self) -> RepoInfo:
@@ -601,7 +623,7 @@ class BranchAnalyzer:
                     state="MERGED",
                     title="",
                     base_ref=pr_details.get("baseRefName"),
-                    merge_commit_sha=pr_details.get("merge_commit_sha")
+                    merge_commit=pr_details.get("mergeCommit", {}).get("oid") if isinstance(pr_details.get("mergeCommit"), dict) else pr_details.get("mergeCommit")
                 )
 
         merge_commit = self._get_merge_commit_for_pr_info(pr) if pr else self._get_merge_commit_for_pr(pr_number)
@@ -806,7 +828,7 @@ async def websocket_branches(websocket: WebSocket):
             while not message_queue.empty():
                 try:
                     message = message_queue.get_nowait()
-                    logger.debug(f"Processing message from queue: {message}")
+                    logger.info(f"Processing message from queue: {message}")
                     if message.get("type") == "pause":
                         is_paused = True
                         logger.info(f"Analysis paused by client")
@@ -859,7 +881,7 @@ async def websocket_branches(websocket: WebSocket):
 
             # Skip already analyzed branches (for resume)
             if branch in analyzed_branches:
-                logger.debug(f"Skipping already analyzed branch: {branch}")
+                logger.info(f"Skipping already analyzed branch: {branch}")
                 continue
 
             await websocket.send_json({
