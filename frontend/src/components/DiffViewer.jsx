@@ -132,6 +132,10 @@ const DiffViewer = ({ data, onClose }) => {
           e.preventDefault();
           onClose();
           break;
+        case "v":
+          e.preventDefault();
+          setViewMode((prev) => (prev === "split" ? "unified" : "split"));
+          break;
       }
     };
 
@@ -272,6 +276,9 @@ const DiffViewer = ({ data, onClose }) => {
                     <span className="text-sm">Unified View</span>
                   </>
                 )}
+                <kbd className="ml-1 text-xs px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                  V
+                </kbd>
               </button>
             </div>
             <button
