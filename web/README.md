@@ -36,7 +36,7 @@ A modern web interface for managing Git branches based on their GitHub PR status
 From within any Git repository:
 
 ```bash
-/path/to/branch-cleaner/web/start.sh
+/path/to/branch-cleaner/start.sh
 ```
 
 This will:

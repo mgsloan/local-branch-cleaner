@@ -41,8 +41,6 @@ if ! gh auth status &> /dev/null; then
     exit 1
 fi
 
-
-
 # Function to kill background processes on exit
 cleanup() {
     echo -e "\n${BLUE}🛑 Shutting down services...${NC}"
@@ -55,7 +53,7 @@ trap cleanup EXIT INT TERM
 
 # Start the backend server
 echo -e "${BLUE}📡 Starting backend server...${NC}"
-cd "$SCRIPT_DIR/backend"
+cd "$SCRIPT_DIR/web/backend"
 
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
@@ -69,7 +67,7 @@ pip install -q -r requirements.txt
 
 # Start the backend server in the background with the repo directory
 export GIT_REPO_PATH="$REPO_DIR"
-python "$SCRIPT_DIR/backend/app.py" &
+python app.py &
 BACKEND_PID=$!
 
 # Wait for backend to start
@@ -88,7 +86,7 @@ done
 
 # Start the frontend server
 echo -e "${BLUE}🎨 Starting frontend server...${NC}"
-cd "$SCRIPT_DIR/frontend"
+cd "$SCRIPT_DIR/web/frontend"
 
 # Install frontend dependencies if needed
 if [ ! -d "node_modules" ]; then
