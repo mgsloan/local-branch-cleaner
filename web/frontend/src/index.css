@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600;
+  }
+
+  .card {
+    @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .diff-addition {
+    @apply bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200;
+  }
+
+  .diff-deletion {
+    @apply bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200;
+  }
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 dark:bg-gray-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-400 dark:bg-gray-600 rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500 dark:bg-gray-500;
+}
+
+/* Loading animation */
+.loading-dots::after {
+  content: '';
+  animation: loading-dots 1.5s infinite;
+}
+
+@keyframes loading-dots {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+  100% { content: ''; }
+}
+
+/* Diff viewer overrides */
+.diff-viewer {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace !important;
+  font-size: 13px !important;
+}
+
+.diff-viewer table {
+  @apply border-collapse;
+}
+
+.diff-viewer .line-number {
+  @apply select-none text-gray-500 dark:text-gray-400;
+}
+
+/* Dark mode support for diff viewer */
+@media (prefers-color-scheme: dark) {
+  .diff-viewer {
+    background-color: #1f2937 !important;
+  }
+
+  .diff-viewer .line {
+    color: #e5e7eb !important;
+  }
+
+  .diff-viewer .addition {
+    background-color: rgba(34, 197, 94, 0.1) !important;
+  }
+
+  .diff-viewer .deletion {
+    background-color: rgba(239, 68, 68, 0.1) !important;
+  }
+}
