@@ -97,20 +97,35 @@ const ConfirmDialog = ({
                             : "branches"}
                         </span>
                       </label>
-                      {includeRemote && (
-                        <div className="mt-2 ml-6 space-y-1">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-1">
-                            <Cloud className="h-3 w-3" />
-                            <span>Remote branches to delete:</span>
-                          </p>
-                          {branchesWithRemotes.map((branch) => (
-                            <div
-                              key={branch}
-                              className="text-xs font-mono bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-2 py-0.5 rounded inline-block mr-2"
-                            >
-                              origin/{branch}
+                      {branchesWithRemotes.length > 0 && (
+                        <div className="mt-2 ml-6 space-y-2">
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            {branchesWithRemotes.length} remote{" "}
+                            {branchesWithRemotes.length === 1
+                              ? "branch exists"
+                              : "branches exist"}
+                            :
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {branchesWithRemotes.map((branch) => (
+                                <span
+                                  key={branch}
+                                  className="font-mono text-gray-700 dark:text-gray-300"
+                                >
+                                  origin/{branch}
+                                </span>
+                              ))}
                             </div>
-                          ))}
+                          </div>
+                          {includeRemote && (
+                            <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/10 rounded border border-red-200 dark:border-red-800">
+                              <p className="text-xs text-red-700 dark:text-red-300 font-medium flex items-center space-x-1">
+                                <Cloud className="h-3 w-3" />
+                                <span>
+                                  These remote branches will be deleted
+                                </span>
+                              </p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
