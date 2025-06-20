@@ -312,15 +312,22 @@ function App() {
 
   const pauseAnalysis = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log("Sending pause message to backend");
       wsRef.current.send(JSON.stringify({ type: "pause" }));
       setStatusMessage("Pausing analysis...");
+    } else {
+      console.error("WebSocket not open, cannot pause");
     }
   };
 
   const resumeAnalysis = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log("Sending resume message to backend");
       wsRef.current.send(JSON.stringify({ type: "resume" }));
       setStatusMessage("Resuming analysis...");
+      setIsPaused(false);
+    } else {
+      console.error("WebSocket not open, cannot resume");
     }
   };
 
