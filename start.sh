@@ -53,7 +53,7 @@ trap cleanup EXIT INT TERM
 
 # Start the backend server
 echo -e "${BLUE}📡 Starting backend server...${NC}"
-cd "$SCRIPT_DIR/web/backend"
+cd "$SCRIPT_DIR/backend"
 
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
@@ -86,7 +86,7 @@ done
 
 # Start the frontend server
 echo -e "${BLUE}🎨 Starting frontend server...${NC}"
-cd "$SCRIPT_DIR/web/frontend"
+cd "$SCRIPT_DIR/frontend"
 
 # Install frontend dependencies if needed
 if [ ! -d "node_modules" ]; then
