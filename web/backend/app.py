@@ -156,7 +156,7 @@ class BranchAnalyzer:
         ])
 
         if result.returncode != 0:
-            logger.warning(f"Failed to get PR info for branch {branch}: {result.stderr}")
+            logger.error(f"Failed to get PR info for branch {branch}: {result.stderr}")
             return []
 
         try:
@@ -244,7 +244,7 @@ class BranchAnalyzer:
                 if unpushed > 0:
                     logger.info(f"Branch {branch} has {unpushed} unpushed commits")
             except ValueError:
-                logger.warning(f"Could not parse unpushed count for {branch}: {unpushed_result.stdout}")
+                logger.error(f"Could not parse unpushed count for {branch}: {unpushed_result.stdout}")
 
         # Count unpulled commits (in remote but not in local)
         unpulled_cmd = ["git", "rev-list", "--count", f"{branch}..{tracking_branch}"]
@@ -257,7 +257,7 @@ class BranchAnalyzer:
                 if unpulled > 0:
                     logger.info(f"Branch {branch} has {unpulled} unpulled commits")
             except ValueError:
-                logger.warning(f"Could not parse unpulled count for {branch}: {unpulled_result.stdout}")
+                logger.error(f"Could not parse unpulled count for {branch}: {unpulled_result.stdout}")
 
         if unpushed > 0 or unpulled > 0:
             logger.info(f"Branch {branch}: {unpushed} unpushed, {unpulled} unpulled (tracking {tracking_branch})")
@@ -340,7 +340,7 @@ class BranchAnalyzer:
                 logger.info(f"Found merge commit {commit} for PR #{pr_number} using pattern '{pattern}'")
                 return commit
 
-        logger.warning(f"Could not find merge commit for PR #{pr_number} in {target_branch}")
+        logger.error(f"Could not find merge commit for PR #{pr_number} in {target_branch}")
         return None
 
     def _get_patch_id(self, base: str, branch: str) -> Optional[str]:
@@ -381,7 +381,7 @@ class BranchAnalyzer:
         """Compare branch content with what was merged in the PR"""
         merge_commit = self._get_merge_commit_for_pr_info(pr)
         if not merge_commit:
-            logger.warning(f"Cannot compare branch {branch} - merge commit not found for PR #{pr.number}")
+            logger.error(f"Cannot compare branch {branch} - merge commit not found for PR #{pr.number}")
             return False, None
 
         # Use the PR's target branch if available, otherwise use main
@@ -407,7 +407,7 @@ class BranchAnalyzer:
         pr_diff_result = self._run_command(["git", "diff", pr_merge_base, merge_commit])
 
         if branch_diff_result.returncode != 0 or pr_diff_result.returncode != 0:
-            logger.warning(f"Could not get diffs for branch {branch}")
+            logger.error(f"Could not get diffs for branch {branch}")
             return False, None
 
         # Extract only the actual changed lines (+ and -) for comparison
@@ -809,7 +809,7 @@ async def websocket_branches(websocket: WebSocket):
 
         fetch_result = analyzer._run_command(["git", "fetch", "--all", "--prune"])
         if fetch_result.returncode != 0:
-            logger.warning(f"Git fetch failed: {fetch_result.stderr}")
+            logger.error(f"Git fetch failed: {fetch_result.stderr}")
 
         # Get all local branches
         branches = analyzer.get_local_branches()
