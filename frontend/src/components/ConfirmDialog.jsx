@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { AlertTriangle, X, GitBranch, Cloud } from "lucide-react";
 
 const ConfirmDialog = ({
@@ -10,6 +10,36 @@ const ConfirmDialog = ({
   onCancel,
   onToggleRemote,
 }) => {
+  const deleteButtonRef = useRef(null);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e) => {
+      switch (e.key) {
+        case "Enter":
+          e.preventDefault();
+          onConfirm();
+          break;
+        case "Escape":
+          e.preventDefault();
+          onCancel();
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onConfirm, onCancel]);
+
+  // Focus the delete button when dialog opens
+  useEffect(() => {
+    if (open && deleteButtonRef.current) {
+      deleteButtonRef.current.focus();
+    }
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -91,6 +121,7 @@ const ConfirmDialog = ({
           </div>
           <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 sm:px-6 sm:flex sm:flex-row-reverse">
             <button
+              ref={deleteButtonRef}
               type="button"
               onClick={onConfirm}
               className="inline-flex justify-center w-full px-4 py-2 text-base font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"

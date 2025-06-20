@@ -97,6 +97,7 @@ function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [repoInfo, setRepoInfo] = useState(null);
   const wsRef = useRef(null);
+  const [selectedBranchIndex, setSelectedBranchIndex] = useState(-1);
 
   // WebSocket connection for streaming branch data
   useEffect(() => {
@@ -204,6 +205,38 @@ function App() {
       return acc;
     }, {});
   }, [branches, searchQuery, filterState]);
+
+  // Get all visible branches in order
+  const visibleBranches = useMemo(() => {
+    const branches = [];
+    Object.entries(BRANCH_CATEGORIES).forEach(([categoryKey, categoryInfo]) => {
+      if (expandedCategories.has(categoryKey)) {
+        const categoryBranches = categorizedBranches[categoryKey] || [];
+        branches.push(...categoryBranches);
+      }
+    });
+    return branches;
+  }, [categorizedBranches, expandedCategories]);
+
+  // Reset selected branch index when branches change
+  useEffect(() => {
+    if (selectedBranchIndex >= visibleBranches.length) {
+      setSelectedBranchIndex(visibleBranches.length - 1);
+    }
+  }, [visibleBranches]);
+
+  // Scroll selected branch into view
+  useEffect(() => {
+    if (selectedBranchIndex >= 0) {
+      const branchElements = document.querySelectorAll("[data-branch-card]");
+      if (branchElements[selectedBranchIndex]) {
+        branchElements[selectedBranchIndex].scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }
+    }
+  }, [selectedBranchIndex]);
 
   const toggleCategory = (category) => {
     setExpandedCategories((prev) => {
@@ -325,6 +358,85 @@ function App() {
     window.location.reload();
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Don't handle shortcuts if user is typing in input
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+        return;
+      }
+
+      switch (e.key) {
+        case "j":
+          e.preventDefault();
+          setSelectedBranchIndex((prev) =>
+            prev < visibleBranches.length - 1 ? prev + 1 : prev,
+          );
+          break;
+
+        case "k":
+          e.preventDefault();
+          setSelectedBranchIndex((prev) => (prev > 0 ? prev - 1 : 0));
+          break;
+
+        case " ":
+        case "x":
+          e.preventDefault();
+          if (
+            selectedBranchIndex >= 0 &&
+            selectedBranchIndex < visibleBranches.length
+          ) {
+            const branch = visibleBranches[selectedBranchIndex];
+            toggleBranchSelection(branch.name);
+          }
+          break;
+
+        case "Enter":
+          e.preventDefault();
+          if (
+            selectedBranchIndex >= 0 &&
+            selectedBranchIndex < visibleBranches.length
+          ) {
+            const branch = visibleBranches[selectedBranchIndex];
+            const mergedPR = branch.prs?.find((pr) => pr.state === "MERGED");
+            if (branch.has_differences && mergedPR) {
+              viewDiff(branch, mergedPR.number);
+            }
+          }
+          break;
+
+        case "d":
+          e.preventDefault();
+          if (selectedBranches.size > 0) {
+            handleDelete(Array.from(selectedBranches));
+          } else if (
+            selectedBranchIndex >= 0 &&
+            selectedBranchIndex < visibleBranches.length
+          ) {
+            const branch = visibleBranches[selectedBranchIndex];
+            handleDelete([branch.name]);
+          }
+          break;
+
+        case "Escape":
+          e.preventDefault();
+          setSelectedBranches(new Set());
+          setSelectedBranchIndex(-1);
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [
+    visibleBranches,
+    selectedBranchIndex,
+    selectedBranches,
+    toggleBranchSelection,
+    handleDelete,
+    viewDiff,
+  ]);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -442,12 +554,18 @@ function App() {
                 >
                   <Trash2 className="h-4 w-4" />
                   <span>Delete Selected</span>
+                  <kbd className="ml-2 text-xs px-1 py-0.5 bg-red-700 rounded">
+                    D
+                  </kbd>
                 </button>
                 <button
                   onClick={() => setSelectedBranches(new Set())}
                   className="btn btn-secondary"
                 >
                   Clear Selection
+                  <kbd className="ml-2 text-xs px-1 py-0.5 bg-gray-300 dark:bg-gray-600 rounded">
+                    Esc
+                  </kbd>
                 </button>
               </div>
             )}
@@ -518,20 +636,29 @@ function App() {
                 {/* Branches in Category */}
                 {isExpanded && (
                   <div className="mt-2 space-y-2">
-                    {branchesInCategory.map((branch) => (
-                      <BranchCard
-                        key={branch.name}
-                        branch={branch}
-                        isSelected={selectedBranches.has(branch.name)}
-                        onToggleSelect={() =>
-                          toggleBranchSelection(branch.name)
-                        }
-                        onDelete={(includeRemote) =>
-                          handleDelete([branch.name], includeRemote)
-                        }
-                        onViewDiff={(prNumber) => viewDiff(branch, prNumber)}
-                      />
-                    ))}
+                    {branchesInCategory.map((branch, index) => {
+                      const globalIndex = visibleBranches.findIndex(
+                        (b) => b.name === branch.name,
+                      );
+                      return (
+                        <div key={branch.name} data-branch-card>
+                          <BranchCard
+                            branch={branch}
+                            isSelected={selectedBranches.has(branch.name)}
+                            isHighlighted={globalIndex === selectedBranchIndex}
+                            onToggleSelect={() =>
+                              toggleBranchSelection(branch.name)
+                            }
+                            onDelete={(includeRemote) =>
+                              handleDelete([branch.name], includeRemote)
+                            }
+                            onViewDiff={(prNumber) =>
+                              viewDiff(branch, prNumber)
+                            }
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -571,6 +698,27 @@ function App() {
             )}
           </div>
         )}
+
+        {/* Keyboard shortcuts help */}
+        <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+          <span className="font-medium">Keyboard shortcuts:</span>{" "}
+          <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+            j/k
+          </kbd>{" "}
+          navigate{" "}
+          <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+            space/x
+          </kbd>{" "}
+          select{" "}
+          <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+            enter
+          </kbd>{" "}
+          diff{" "}
+          <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+            d
+          </kbd>{" "}
+          delete
+        </div>
       </main>
 
       {/* Diff Viewer Modal */}

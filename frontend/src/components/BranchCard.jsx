@@ -19,6 +19,7 @@ import {
 const BranchCard = ({
   branch,
   isSelected,
+  isHighlighted,
   onToggleSelect,
   onDelete,
   onViewDiff,
@@ -59,7 +60,11 @@ const BranchCard = ({
   const mergedPR = branch.prs?.find((pr) => pr.state === "MERGED");
 
   return (
-    <div className={`card p-4 ${isSelected ? "ring-2 ring-blue-500" : ""}`}>
+    <div
+      className={`card p-4 ${isSelected ? "ring-2 ring-blue-500" : ""} ${
+        isHighlighted ? "ring-2 ring-gray-400 dark:ring-gray-500" : ""
+      }`}
+    >
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-3 flex-1">
           {/* Selection Checkbox */}
