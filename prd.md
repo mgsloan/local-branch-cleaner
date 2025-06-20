@@ -1,3 +1,5 @@
+This was mostly generated from a brief description of what I wanted and referencing a previously generated branch cleanup bash script.  There was some manual editing to reduce the scope, simplify the design, and select which dependencies to use.
+
 # Branch Cleaner Web UI - Product Requirements Document
 
 ## Overview
@@ -142,33 +144,14 @@ Branches grouped into sections:
 ### 2. API Endpoints
 
 ```
-GET /api/branches
-  - Returns list of all local branches with basic info
-  - Supports streaming responses
+DELETE /branch
+  - Deletes a local branch
 
-GET /api/branches/:branchName
-  - Detailed information about a specific branch
-  - Includes PR data and diff summary
+DELETE /remote-branch
+  - Deletes a remote branch
 
-GET /api/branches/:branchName/diff
-  - Full diff comparison between branch and merged PR
-
-POST /api/branches/:branchName/delete
-  - Delete a single branch
-  - Returns confirmation or error
-
-POST /api/branches/bulk-delete
-  - Delete multiple branches
-  - Body: { branches: string[], dryRun: boolean }
-
-GET /api/settings
-  - Get current settings
-
-PUT /api/settings
-  - Update settings
-
-WebSocket /ws
-  - Real-time updates during branch analysis
+WebSocket /branches
+  - Streams branches with all info - status, diff, etc
 ```
 
 ## UI/UX Requirements
@@ -176,19 +159,8 @@ WebSocket /ws
 ### 1. Visual Design
 
 #### 1.1 Layout
-- Fixed header with search and filters
-- Sidebar with branch categories and counts
-- Main content area with branch list
-- Modal overlay for diff viewer
 
-#### 1.2 Visual Elements
-- Color coding for branch states:
-  - Green: Safe to delete
-  - Yellow: Review required
-  - Red: Active/Open PR
-  - Gray: No PR
-- Icons for quick status recognition
-- Progress bars for loading states
+List of branches with folding.
 
 ### 2. Interactions
 
@@ -196,89 +168,9 @@ WebSocket /ws
 - Immediate visual feedback on actions
 - Loading states for async operations
 - Success/error notifications
-- Smooth transitions and animations
 
 #### 2.2 Keyboard Shortcuts
 - `j/k` - Navigate between branches
-- `space` - Toggle branch selection
+- `space` or `x` - Toggle branch selection
 - `enter` - View diff
-- `d` - Delete selected
-- `?` - Show keyboard shortcuts
-
-### 3. Accessibility
-
-- ARIA labels for screen readers
-- Keyboard navigation support
-- High contrast mode
-- Proper focus management
-
-## Implementation Phases
-
-### Phase 1: MVP (Week 1-2)
-- Basic web server setup
-- Branch list with PR status
-- Simple diff viewer
-- Single branch deletion
-- Streaming updates
-
-### Phase 2: Enhanced Diff Viewer (Week 3)
-- Side-by-side diff comparison
-- Syntax highlighting
-- Diff navigation
-- File tree view
-
-### Phase 3: Bulk Operations (Week 4)
-- Multi-select functionality
-- Bulk delete with confirmation
-- Undo capability
-- Export branch list
-
-### Phase 4: Polish (Week 5)
-- Search and filtering
-- Settings persistence
-- Keyboard shortcuts
-- Performance optimizations
-
-## Success Metrics
-
-1. **Time to Review**: Reduce time to review all branches by 70%
-2. **Error Rate**: Zero accidental deletions of branches with uncommitted work
-3. **User Satisfaction**: 90% of users prefer web UI over CLI
-4. **Performance**: Load and analyze 50 branches in under 5 seconds
-
-## Out of Scope
-
-- Remote branch management
-- Creating or merging PRs
-- Commit history visualization
-- Multi-repository support (v1)
-- Branch creation or renaming
-
-## Dependencies
-
-- Git CLI available on system
-- GitHub CLI (`gh`) authenticated
-- Modern web browser with WebSocket support
-- Local filesystem access for Git operations
-
-## Risks and Mitigation
-
-1. **Risk**: Performance with large numbers of branches
-   - **Mitigation**: Implement pagination and virtual scrolling
-
-2. **Risk**: Concurrent Git operations causing conflicts
-   - **Mitigation**: Queue operations and show clear status
-
-3. **Risk**: GitHub API rate limits
-   - **Mitigation**: Cache PR data, implement exponential backoff
-
-4. **Risk**: Complex merge conflicts in diff view
-   - **Mitigation**: Provide fallback to external diff tools
-
-## Future Enhancements
-
-- Integration with popular IDEs (VSCode, IntelliJ)
-- Support for other Git providers (GitLab, Bitbucket)
-- Branch analytics and insights
-- Automated cleanup scheduling
-- Team-wide branch policies
+- `d` - Delete selected. If the remote branch exists, prompt whether to delete it too
