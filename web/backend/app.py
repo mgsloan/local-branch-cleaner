@@ -5,6 +5,7 @@ Branch Cleaner Web API - Backend server for managing Git branches based on PR st
 
 import asyncio
 import json
+import logging
 import os
 import subprocess
 import tempfile
@@ -17,6 +18,13 @@ from fastapi import FastAPI, WebSocket, HTTPException, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 class PRState(str, Enum):
@@ -65,15 +73,33 @@ class DeleteBranchRequest(BaseModel):
     delete_remote: bool = False
 
 
+class RepoInfo(BaseModel):
+    """Repository information"""
+    path: str
+    remote_url: Optional[str] = None
+    main_branch: str
+    total_branches: int = 0
+
+
 class BranchAnalyzer:
     """Analyzes Git branches and their PR status"""
 
-    def __init__(self, repo_path: str = "."):
-        self.repo_path = Path(repo_path)
+    def __init__(self, repo_path: str = None):
+        if repo_path is None:
+            repo_path = os.environ.get('GIT_REPO_PATH', '.')
+        self.repo_path = Path(repo_path).resolve()
+        logger.info(f"Initializing BranchAnalyzer with repo path: {self.repo_path}")
+
+        # Verify it's a git repository
+        if not (self.repo_path / '.git').exists():
+            raise ValueError(f"Not a git repository: {self.repo_path}")
+
         self.main_branch = self._get_main_branch()
+        self.remote_url = self._get_remote_url()
 
     def _get_main_branch(self) -> str:
         """Detect the main branch (main or master)"""
+        logger.info("Detecting main branch...")
         result = subprocess.run(
             ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
             cwd=self.repo_path,
@@ -82,7 +108,9 @@ class BranchAnalyzer:
         )
         if result.returncode == 0:
             # Extract branch name from refs/remotes/origin/main
-            return result.stdout.strip().split('/')[-1]
+            main_branch = result.stdout.strip().split('/')[-1]
+            logger.info(f"Main branch detected from HEAD: {main_branch}")
+            return main_branch
 
         # Fallback: check if main or master exists
         for branch in ["main", "master"]:
@@ -92,16 +120,30 @@ class BranchAnalyzer:
                 capture_output=True
             )
             if result.returncode == 0:
+                logger.info(f"Main branch detected by checking: {branch}")
                 return branch
 
+        logger.warning("Could not detect main branch, defaulting to 'main'")
         return "main"  # Default fallback
+
+    def _get_remote_url(self) -> Optional[str]:
+        """Get the remote repository URL"""
+        result = self._run_command(["git", "remote", "get-url", "origin"])
+        if result.returncode == 0:
+            return result.stdout.strip()
+        return None
 
     def _run_command(self, cmd: List[str]) -> subprocess.CompletedProcess:
         """Run a command and return the result"""
-        return subprocess.run(cmd, cwd=self.repo_path, capture_output=True, text=True)
+        logger.debug(f"Running command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, cwd=self.repo_path, capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.debug(f"Command failed with code {result.returncode}: {result.stderr}")
+        return result
 
     def _get_pr_info(self, branch: str) -> List[PRInfo]:
         """Get PR information for a branch using gh CLI"""
+        logger.debug(f"Getting PR info for branch: {branch}")
         result = self._run_command([
             "gh", "pr", "list",
             "--head", branch,
@@ -110,21 +152,24 @@ class BranchAnalyzer:
         ])
 
         if result.returncode != 0:
+            logger.warning(f"Failed to get PR info for branch {branch}: {result.stderr}")
             return []
 
         try:
             pr_data = json.loads(result.stdout)
+            logger.debug(f"Found {len(pr_data)} PRs for branch {branch}")
             return [
                 PRInfo(
                     number=pr["number"],
                     state=pr["state"],
                     title=pr["title"],
                     url=pr.get("url"),
-                    merge_commit=pr.get("mergeCommit")
+                    merge_commit=pr.get("mergeCommit", {}).get("oid") if isinstance(pr.get("mergeCommit"), dict) else pr.get("mergeCommit")
                 )
                 for pr in pr_data
             ]
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse PR data for branch {branch}: {e}")
             return []
 
     def _get_branch_last_commit_info(self, branch: str) -> tuple[Optional[datetime], Optional[str]]:
@@ -248,6 +293,7 @@ class BranchAnalyzer:
 
     async def analyze_branch(self, branch: str) -> BranchInfo:
         """Analyze a single branch"""
+        logger.info(f"Analyzing branch: {branch}")
         try:
             # Get PR info
             prs = self._get_pr_info(branch)
@@ -296,17 +342,35 @@ class BranchAnalyzer:
 
     def get_local_branches(self) -> List[str]:
         """Get list of local branches"""
+        logger.info("Getting local branches...")
         result = self._run_command(["git", "branch", "--format=%(refname:short)"])
         if result.returncode != 0:
+            logger.error(f"Failed to get branches: {result.stderr}")
             return []
 
+        all_branches = []
         branches = []
         for branch in result.stdout.strip().split('\n'):
             branch = branch.strip()
-            if branch and branch not in [self.main_branch, "master", "main"]:
-                branches.append(branch)
+            if branch:
+                all_branches.append(branch)
+                if branch not in [self.main_branch, "master", "main"]:
+                    branches.append(branch)
 
+        logger.info(f"Found {len(all_branches)} total branches, {len(branches)} to analyze (excluding {self.main_branch})")
+        logger.debug(f"All branches: {all_branches}")
+        logger.debug(f"Branches to analyze: {branches}")
         return branches
+
+    def get_repo_info(self) -> RepoInfo:
+        """Get repository information"""
+        branches = self.get_local_branches()
+        return RepoInfo(
+            path=str(self.repo_path),
+            remote_url=self.remote_url,
+            main_branch=self.main_branch,
+            total_branches=len(branches)
+        )
 
     def delete_branch(self, branch: str, delete_remote: bool = False) -> bool:
         """Delete a local branch and optionally the remote branch"""
@@ -392,23 +456,49 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global analyzer instance
-analyzer = BranchAnalyzer()
+# Global analyzer instance (will be initialized on first request)
+analyzer = None
+
+def get_analyzer():
+    """Get or create the analyzer instance"""
+    global analyzer
+    if analyzer is None:
+        try:
+            repo_path = os.environ.get('GIT_REPO_PATH', '.')
+            analyzer = BranchAnalyzer(repo_path)
+            logger.info(f"BranchAnalyzer initialized successfully with path: {repo_path}")
+        except Exception as e:
+            logger.error(f"Failed to initialize BranchAnalyzer: {e}")
+            raise
+    return analyzer
 
 
 @app.websocket("/ws/branches")
 async def websocket_branches(websocket: WebSocket):
     """Stream branch analysis results via WebSocket"""
     await websocket.accept()
+    logger.info("WebSocket connection established")
 
     try:
+        # Get analyzer
+        analyzer = get_analyzer()
+
+        # Send repository info first
+        repo_info = analyzer.get_repo_info()
+        await websocket.send_json({
+            "type": "repo_info",
+            "data": repo_info.dict()
+        })
+
         # Fetch branches first
         await websocket.send_json({
             "type": "status",
             "message": "Fetching latest changes from remote..."
         })
 
-        analyzer._run_command(["git", "fetch", "origin"])
+        fetch_result = analyzer._run_command(["git", "fetch", "origin"])
+        if fetch_result.returncode != 0:
+            logger.warning(f"Git fetch failed: {fetch_result.stderr}")
 
         # Get all local branches
         branches = analyzer.get_local_branches()
@@ -432,9 +522,14 @@ async def websocket_branches(websocket: WebSocket):
             branch_info = await analyzer.analyze_branch(branch)
 
             # Send branch data
+            # Convert datetime to ISO format string for JSON serialization
+            branch_data = branch_info.dict()
+            if branch_data.get('last_commit_date'):
+                branch_data['last_commit_date'] = branch_data['last_commit_date'].isoformat()
+
             await websocket.send_json({
                 "type": "branch",
-                "data": branch_info.dict()
+                "data": branch_data
             })
 
             # Small delay to prevent overwhelming the client
@@ -447,8 +542,9 @@ async def websocket_branches(websocket: WebSocket):
         })
 
     except WebSocketDisconnect:
-        pass
+        logger.info("WebSocket disconnected")
     except Exception as e:
+        logger.error(f"WebSocket error: {e}", exc_info=True)
         await websocket.send_json({
             "type": "error",
             "message": str(e)
@@ -460,9 +556,11 @@ async def websocket_branches(websocket: WebSocket):
 async def delete_branch(request: DeleteBranchRequest):
     """Delete a local branch and optionally the remote branch"""
     try:
+        analyzer = get_analyzer()
         analyzer.delete_branch(request.branch_name, request.delete_remote)
         return {"success": True, "message": f"Branch {request.branch_name} deleted"}
     except Exception as e:
+        logger.error(f"Failed to delete branch {request.branch_name}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -470,17 +568,35 @@ async def delete_branch(request: DeleteBranchRequest):
 async def get_branch_diff(branch_name: str, pr_number: int):
     """Get diff information for a branch compared to its merged PR"""
     try:
+        analyzer = get_analyzer()
         diff_data = analyzer.get_branch_diff(branch_name, pr_number)
         return diff_data
     except Exception as e:
+        logger.error(f"Failed to get diff for branch {branch_name}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "main_branch": analyzer.main_branch}
+    try:
+        analyzer = get_analyzer()
+        return {"status": "healthy", "main_branch": analyzer.main_branch}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {"status": "unhealthy", "error": str(e)}
+
+@app.get("/api/repo-info")
+async def get_repo_info():
+    """Get repository information"""
+    try:
+        analyzer = get_analyzer()
+        return analyzer.get_repo_info()
+    except Exception as e:
+        logger.error(f"Failed to get repo info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    logger.info("Starting Branch Cleaner API server...")
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

@@ -13,12 +13,19 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}🚀 Starting Branch Cleaner Web UI${NC}"
 
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 # Check if we're in a git repository
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
     echo -e "${RED}❌ Error: Not in a git repository${NC}"
     echo "Please run this script from within a git repository"
     exit 1
 fi
+
+# Store the current working directory (the git repository)
+REPO_DIR="$(pwd)"
+echo -e "${BLUE}📁 Repository directory: $REPO_DIR${NC}"
 
 # Check if gh CLI is installed
 if ! command -v gh &> /dev/null; then
@@ -34,8 +41,7 @@ if ! gh auth status &> /dev/null; then
     exit 1
 fi
 
-# Get the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 
 # Function to kill background processes on exit
 cleanup() {
@@ -61,8 +67,9 @@ fi
 source venv/bin/activate
 pip install -q -r requirements.txt
 
-# Start the backend server in the background
-python app.py &
+# Start the backend server in the background with the repo directory
+export GIT_REPO_PATH="$REPO_DIR"
+python "$SCRIPT_DIR/backend/app.py" &
 BACKEND_PID=$!
 
 # Wait for backend to start
