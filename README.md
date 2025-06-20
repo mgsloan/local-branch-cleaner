@@ -14,12 +14,16 @@ Run `path-to-this-repo/start.sh` from within a git repository that has a GitHub 
 
 ## Prerequisites
 
-(Not sure if these are accurate, this is just what the model listed)
+May not be comprehensive (generated this too):
 
-- Python 3.8+
-- Node.js 16+
-- Git
-- [GitHub CLI (`gh`)](https://cli.github.com/) - authenticated with your GitHub account
+- **Python 3.8+** with `python3-venv` package
+  - Ubuntu/Debian: `sudo apt install python3-venv python3-full`
+- **Node.js 16+** and npm
+  - Frontend built with React 18 and Vite
+- **Git** (any recent version)
+- **[GitHub CLI (`gh`)](https://cli.github.com/)** - must be authenticated
+  - Install from https://cli.github.com/
+  - Authenticate with: `gh auth login`
 
 ## Screenshots
 
