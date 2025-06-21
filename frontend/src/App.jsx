@@ -98,11 +98,19 @@ function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [repoInfo, setRepoInfo] = useState(null);
   const wsRef = useRef(null);
+  const mainContentRef = useRef(null);
   const [selectedBranchIndex, setSelectedBranchIndex] = useState(-1);
   const [checkoutDialog, setCheckoutDialog] = useState({
     open: false,
     branchName: "",
   });
+
+  // Focus main content on mount
+  useEffect(() => {
+    if (mainContentRef.current) {
+      mainContentRef.current.focus();
+    }
+  }, []);
 
   // WebSocket connection for streaming branch data
   useEffect(() => {
@@ -446,6 +454,13 @@ function App() {
       }
 
       switch (e.key) {
+        case " ":
+          // Allow space to scroll normally when main content is focused
+          if (e.target === mainContentRef.current) {
+            return;
+          }
+          break;
+
         case "j":
           e.preventDefault();
           setSelectedBranchIndex((prev) =>
@@ -698,7 +713,11 @@ function App() {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden">
+      <main
+        ref={mainContentRef}
+        className="flex-1 overflow-y-auto overflow-x-hidden focus:outline-none"
+        tabIndex={0}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 h-full">
           {Object.entries(BRANCH_CATEGORIES).map(
             ([categoryKey, categoryInfo]) => {
@@ -868,7 +887,11 @@ function App() {
             <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
               c
             </kbd>{" "}
-            checkout
+            checkout{" "}
+            <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+              space
+            </kbd>{" "}
+            scroll
           </div>
         </div>
       </main>
