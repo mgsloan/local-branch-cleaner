@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 const DiffViewer = ({ data, onClose }) => {
-  const [viewMode, setViewMode] = useState("split"); // 'split' or 'unified'
+  const [viewMode, setViewMode] = useState("unified"); // 'split' or 'unified'
   const [expandedFiles, setExpandedFiles] = useState(new Set());
   const [selectedFile, setSelectedFile] = useState(null);
   const [showCommands, setShowCommands] = useState(false);
