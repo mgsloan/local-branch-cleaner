@@ -332,13 +332,9 @@ const DiffViewer = ({ data, onClose }) => {
                   data-git-commands
                 >
                   {data.is_merge_base_diff
-                    ? `# Generate the diff
-${gitCommands.branch}`
-                    : `# Generate the diff files
-${gitCommands.pr} > merged.diff
+                    ? gitCommands.branch
+                    : `${gitCommands.pr} > merged.diff
 ${gitCommands.branch} > local-branch.diff
-
-# Compare them
 diff merged.diff local-branch.diff`}
                 </pre>
                 <button
@@ -348,8 +344,6 @@ diff merged.diff local-branch.diff`}
                         ? gitCommands.branch
                         : `${gitCommands.pr} > merged.diff
 ${gitCommands.branch} > local-branch.diff
-
-# Compare them
 diff merged.diff local-branch.diff`,
                     )
                   }
