@@ -94,6 +94,11 @@ const DiffViewer = ({ data, onClose }) => {
   // Keyboard navigation for files
   useEffect(() => {
     const handleKeyPress = (e) => {
+      // Don't handle shortcuts if any modifier keys are held
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+        return;
+      }
+
       const currentIndex = parsedDiffs.files.findIndex(
         (f) => f.filename === selectedFile,
       );

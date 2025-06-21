@@ -440,6 +440,11 @@ function App() {
         return;
       }
 
+      // Don't handle shortcuts if any modifier keys are held
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+        return;
+      }
+
       switch (e.key) {
         case "j":
           e.preventDefault();
@@ -453,7 +458,6 @@ function App() {
           setSelectedBranchIndex((prev) => (prev > 0 ? prev - 1 : 0));
           break;
 
-        case " ":
         case "x":
           e.preventDefault();
           if (
@@ -842,7 +846,7 @@ function App() {
             </kbd>{" "}
             navigate{" "}
             <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
-              space/x
+              x
             </kbd>{" "}
             select{" "}
             <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">

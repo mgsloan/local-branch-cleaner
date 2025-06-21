@@ -9,6 +9,11 @@ const CheckoutDialog = ({ open, branchName, onConfirm, onCancel }) => {
     if (!open) return;
 
     const handleKeyDown = (e) => {
+      // Don't handle shortcuts if any modifier keys are held
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+        return;
+      }
+
       switch (e.key) {
         case "Enter":
           e.preventDefault();
