@@ -57,14 +57,26 @@ const DiffViewer = ({ data, onClose }) => {
       const prFile = prFiles.get(filename);
 
       let status = "modified";
-      if (!prFile) {
-        status = "added-in-branch";
-      } else if (!branchFile) {
-        status = "removed-in-branch";
-      } else if (branchFile.status === "A") {
-        status = "added";
-      } else if (branchFile.status === "D") {
-        status = "deleted";
+      // For merge base diffs, use the branch file status directly
+      if (data.is_merge_base_diff) {
+        if (branchFile.status === "A") {
+          status = "added";
+        } else if (branchFile.status === "D") {
+          status = "deleted";
+        } else {
+          status = "modified";
+        }
+      } else {
+        // For PR comparisons, check if file exists in both
+        if (!prFile) {
+          status = "added-in-branch";
+        } else if (!branchFile) {
+          status = "removed-in-branch";
+        } else if (branchFile.status === "A") {
+          status = "added";
+        } else if (branchFile.status === "D") {
+          status = "deleted";
+        }
       }
 
       return {
@@ -424,8 +436,16 @@ diff merged.diff local-branch.diff`,
                 </div>
                 <div className="diff-viewer">
                   <ReactDiffViewer
-                    oldValue={extractFileDiff(data.pr_diff, selectedFile)}
-                    newValue={extractFileDiff(data.branch_diff, selectedFile)}
+                    oldValue={
+                      data.file_contents && data.file_contents[selectedFile]
+                        ? data.file_contents[selectedFile].old
+                        : extractFileDiff(data.pr_diff, selectedFile)
+                    }
+                    newValue={
+                      data.file_contents && data.file_contents[selectedFile]
+                        ? data.file_contents[selectedFile].new
+                        : extractFileDiff(data.branch_diff, selectedFile)
+                    }
                     splitView={viewMode === "split"}
                     useDarkTheme={
                       window.matchMedia("(prefers-color-scheme: dark)").matches

@@ -606,12 +606,49 @@ class BranchAnalyzer:
 
         return '\n'.join(file_diff_lines) if file_diff_lines else None
 
+    def _get_file_content_at_ref(self, ref: str, filename: str) -> str:
+        """Get the content of a file at a specific git ref"""
+        result = self._run_command(["git", "show", f"{ref}:{filename}"])
+        if result.returncode != 0:
+            return ""
+        return result.stdout
+
+    def _generate_file_contents_for_diff(self, base_ref: str, target_ref: str, files: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+        """Generate file contents for each file in the diff"""
+        file_contents = {}
+
+        for file_info in files:
+            filename = file_info['filename']
+            status = file_info['status']
+
+            if status == 'D':  # Deleted file
+                file_contents[filename] = {
+                    'old': self._get_file_content_at_ref(base_ref, filename),
+                    'new': ''
+                }
+            elif status == 'A':  # Added file
+                file_contents[filename] = {
+                    'old': '',
+                    'new': self._get_file_content_at_ref(target_ref, filename)
+                }
+            else:  # Modified or renamed
+                file_contents[filename] = {
+                    'old': self._get_file_content_at_ref(base_ref, filename),
+                    'new': self._get_file_content_at_ref(target_ref, filename)
+                }
+
+        return file_contents
+
     def get_branch_diff(self, branch: str, pr_number: int) -> Dict[str, Any]:
         """Get detailed diff information for a branch compared to its merged PR"""
         logger.info(f"Getting diff for branch {branch} vs PR #{pr_number}")
 
         # Special case: if pr_number is 0, just show diff with main branch
         if pr_number == 0:
+            # Get merge base
+            merge_base_result = self._run_command(["git", "merge-base", self.main_branch, branch])
+            merge_base = merge_base_result.stdout.strip() if merge_base_result.returncode == 0 else self.main_branch
+
             # Get the diff using three-dot notation
             branch_diff_result = self._run_command([
                 "git", "diff", "--no-color", f"{self.main_branch}...{branch}"
@@ -624,11 +661,15 @@ class BranchAnalyzer:
 
             branch_files_parsed = self._parse_file_status(branch_files.stdout)
 
+            # Generate file contents for proper diff display
+            file_contents = self._generate_file_contents_for_diff(merge_base, branch, branch_files_parsed)
+
             return {
                 "branch_diff": branch_diff_result.stdout,
                 "pr_diff": "",  # Empty PR diff
                 "branch_files": branch_files_parsed,
                 "pr_files": [],
+                "file_contents": file_contents,
                 "git_commands": {
                     "branch": branch,
                     "base": self.main_branch,
@@ -735,7 +776,8 @@ class BranchAnalyzer:
                     "base": target_branch,
                     "merge_commit": "HEAD"
                 },
-                "is_merge_base_diff": True
+                "is_merge_base_diff": True,
+                "file_contents": {}
             }
 
         return {
@@ -748,7 +790,8 @@ class BranchAnalyzer:
                 "base": target_branch,
                 "pr_parent": pr_parent,
                 "merge_commit": merge_commit
-            }
+            },
+            "file_contents": {}
         }
 
     def _parse_file_status(self, output: str) -> List[Dict[str, str]]:
