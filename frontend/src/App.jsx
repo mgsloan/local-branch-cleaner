@@ -30,6 +30,7 @@ import {
 import DiffViewer from "./components/DiffViewer";
 import BranchCard from "./components/BranchCard";
 import ConfirmDialog from "./components/ConfirmDialog";
+import CheckoutDialog from "./components/CheckoutDialog";
 
 const API_BASE_URL = "/api";
 const WS_URL = "ws://127.0.0.1:8000/ws/branches";
@@ -98,6 +99,10 @@ function App() {
   const [repoInfo, setRepoInfo] = useState(null);
   const wsRef = useRef(null);
   const [selectedBranchIndex, setSelectedBranchIndex] = useState(-1);
+  const [checkoutDialog, setCheckoutDialog] = useState({
+    open: false,
+    branchName: "",
+  });
 
   // WebSocket connection for streaming branch data
   useEffect(() => {
@@ -401,6 +406,32 @@ function App() {
     window.location.reload();
   };
 
+  const handleCheckout = (branchName) => {
+    setCheckoutDialog({
+      open: true,
+      branchName,
+    });
+  };
+
+  const confirmCheckout = async () => {
+    const { branchName } = checkoutDialog;
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/branch/${encodeURIComponent(branchName)}/checkout`,
+      );
+      // Show success message
+      setStatusMessage(`Successfully checked out branch: ${branchName}`);
+      // Clear the success message after 3 seconds
+      setTimeout(() => setStatusMessage(""), 3000);
+    } catch (error) {
+      console.error(`Failed to checkout branch ${branchName}:`, error);
+      alert(
+        `Failed to checkout branch: ${error.response?.data?.detail || error.message}`,
+      );
+    }
+    setCheckoutDialog({ open: false, branchName: "" });
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -473,6 +504,17 @@ function App() {
             if (pr && pr.url) {
               window.open(pr.url, "_blank");
             }
+          }
+          break;
+
+        case "c":
+          e.preventDefault();
+          if (
+            selectedBranchIndex >= 0 &&
+            selectedBranchIndex < visibleBranches.length
+          ) {
+            const branch = visibleBranches[selectedBranchIndex];
+            handleCheckout(branch.name);
           }
           break;
 
@@ -818,7 +860,11 @@ function App() {
             <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
               o
             </kbd>{" "}
-            open PR
+            open PR{" "}
+            <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+              c
+            </kbd>{" "}
+            checkout
           </div>
         </div>
       </main>
@@ -849,6 +895,14 @@ function App() {
         onToggleRemote={(value) =>
           setConfirmDialog((prev) => ({ ...prev, includeRemote: value }))
         }
+      />
+
+      {/* Checkout Dialog */}
+      <CheckoutDialog
+        open={checkoutDialog.open}
+        branchName={checkoutDialog.branchName}
+        onConfirm={confirmCheckout}
+        onCancel={() => setCheckoutDialog({ open: false, branchName: "" })}
       />
     </div>
   );

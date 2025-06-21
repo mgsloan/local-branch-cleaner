@@ -566,6 +566,13 @@ class BranchAnalyzer:
         result = self._run_command(["git", "ls-remote", "--heads", "origin", branch])
         return result.returncode == 0 and bool(result.stdout.strip())
 
+    def checkout_branch(self, branch: str) -> bool:
+        """Checkout a local branch"""
+        result = self._run_command(["git", "checkout", branch])
+        if result.returncode != 0:
+            raise Exception(f"Failed to checkout branch: {result.stderr}")
+        return True
+
     def _normalize_diff_for_display(self, diff_text: str) -> str:
         """Normalize a diff for display by removing index lines but keeping line numbers intact"""
         lines = diff_text.split('\n')
@@ -938,6 +945,19 @@ async def get_branch_diff(branch_name: str, pr_number: int):
     except Exception as e:
         logger.error(f"Failed to get diff for branch {branch_name}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/branch/{branch_name:path}/checkout")
+async def checkout_branch(branch_name: str):
+    """Checkout a local branch"""
+    try:
+        analyzer = get_analyzer()
+        analyzer.checkout_branch(branch_name)
+        return {"success": True, "message": f"Checked out branch {branch_name}"}
+    except Exception as e:
+        logger.error(f"Failed to checkout branch {branch_name}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 
 
