@@ -231,8 +231,10 @@ const DiffViewer = ({ data, onClose }) => {
   };
 
   const gitCommands = {
-    branch: `git diff ${data.git_commands?.branch_merge_base || "<merge-base>"}..${data.branch.name}`,
-    pr: `git diff ${data.git_commands?.pr_merge_base || "<pr-parent>"}..${data.git_commands?.merge_commit || "<merge-commit>"}`,
+    branch: `git diff ${data.git_commands?.base || "<base>"}...${data.git_commands?.branch || data.branch.name}`,
+    pr: data.git_commands?.pr_parent
+      ? `git diff ${data.git_commands.pr_parent}...${data.git_commands?.merge_commit || "<merge-commit>"}`
+      : "",
   };
 
   return (

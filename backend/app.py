@@ -388,24 +388,12 @@ class BranchAnalyzer:
         # Use the PR's target branch if available, otherwise use main
         target_branch = pr.base_ref or self.main_branch
 
-        # Get merge base between the branch and the target branch
-        merge_base_result = self._run_command(["git", "merge-base", branch, target_branch])
-        if merge_base_result.returncode != 0:
-            return False, None
+        # Get the actual diffs using three-dot notation
+        branch_diff_result = self._run_command(["git", "diff", f"{target_branch}...{branch}"])
 
-        merge_base = merge_base_result.stdout.strip()
-
-        # Get the merge base between the PR and its target
+        # For the PR, we need to get the diff from the merge commit's first parent
         pr_parent = f"{merge_commit}^1"
-        pr_merge_base_result = self._run_command(["git", "merge-base", pr_parent, target_branch])
-        if pr_merge_base_result.returncode != 0:
-            pr_merge_base = pr_parent  # Fallback to parent if merge-base fails
-        else:
-            pr_merge_base = pr_merge_base_result.stdout.strip()
-
-        # Get the actual diffs
-        branch_diff_result = self._run_command(["git", "diff", merge_base, branch])
-        pr_diff_result = self._run_command(["git", "diff", pr_merge_base, merge_commit])
+        pr_diff_result = self._run_command(["git", "diff", f"{pr_parent}...{merge_commit}"])
 
         if branch_diff_result.returncode != 0 or pr_diff_result.returncode != 0:
             logger.error(f"Could not get diffs for branch {branch}")
@@ -426,7 +414,7 @@ class BranchAnalyzer:
         if not diffs_match:
             # Get stats for the branch
             stats_result = self._run_command([
-                "git", "diff", "--numstat", merge_base, branch
+                "git", "diff", "--numstat", f"{target_branch}...{branch}"
             ])
             if stats_result.returncode == 0:
                 lines = stats_result.stdout.strip().split('\n')
@@ -622,23 +610,16 @@ class BranchAnalyzer:
         """Get detailed diff information for a branch compared to its merged PR"""
         logger.info(f"Getting diff for branch {branch} vs PR #{pr_number}")
 
-        # Special case: if pr_number is 0, just show diff with merge base
+        # Special case: if pr_number is 0, just show diff with main branch
         if pr_number == 0:
-            # Get merge base with main branch
-            merge_base_result = self._run_command(["git", "merge-base", branch, self.main_branch])
-            if merge_base_result.returncode != 0:
-                raise Exception("Failed to find merge base")
-
-            merge_base = merge_base_result.stdout.strip()
-
-            # Get the diff
+            # Get the diff using three-dot notation
             branch_diff_result = self._run_command([
-                "git", "diff", "--no-color", merge_base, branch
+                "git", "diff", "--no-color", f"{self.main_branch}...{branch}"
             ])
 
             # Get file list
             branch_files = self._run_command([
-                "git", "diff", "--name-status", merge_base, branch
+                "git", "diff", "--name-status", f"{self.main_branch}...{branch}"
             ])
 
             branch_files_parsed = self._parse_file_status(branch_files.stdout)
@@ -649,8 +630,8 @@ class BranchAnalyzer:
                 "branch_files": branch_files_parsed,
                 "pr_files": [],
                 "git_commands": {
-                    "branch_merge_base": merge_base,
-                    "pr_merge_base": merge_base,
+                    "branch": branch,
+                    "base": self.main_branch,
                     "merge_commit": "HEAD"
                 },
                 "is_merge_base_diff": True
@@ -684,28 +665,15 @@ class BranchAnalyzer:
         # Use the PR's target branch if available
         target_branch = pr.base_ref if pr and pr.base_ref else self.main_branch
 
-        # Get merge base
-        merge_base_result = self._run_command(["git", "merge-base", branch, target_branch])
-        if merge_base_result.returncode != 0:
-            raise Exception("Failed to find merge base")
-
-        merge_base = merge_base_result.stdout.strip()
-
-        # Get the merge base for the PR
-        pr_parent = f"{merge_commit}^1"
-        pr_merge_base_result = self._run_command(["git", "merge-base", pr_parent, target_branch])
-        if pr_merge_base_result.returncode != 0:
-            pr_merge_base = pr_parent
-        else:
-            pr_merge_base = pr_merge_base_result.stdout.strip()
-
-        # Get the diffs relative to their respective merge bases
+        # Get the diffs using three-dot notation
         branch_diff_result = self._run_command([
-            "git", "diff", "--no-color", merge_base, branch
+            "git", "diff", "--no-color", f"{target_branch}...{branch}"
         ])
 
+        # For the PR, get the diff from its first parent
+        pr_parent = f"{merge_commit}^1"
         pr_diff_result = self._run_command([
-            "git", "diff", "--no-color", pr_merge_base, merge_commit
+            "git", "diff", "--no-color", f"{pr_parent}...{merge_commit}"
         ])
 
         # Normalize diffs for display
@@ -714,11 +682,12 @@ class BranchAnalyzer:
 
         # Get file lists
         branch_files = self._run_command([
-            "git", "diff", "--name-status", merge_base, branch
+            "git", "diff", "--name-status", f"{target_branch}...{branch}"
         ])
 
+        pr_parent = f"{merge_commit}^1"
         pr_files = self._run_command([
-            "git", "diff", "--name-status", pr_merge_base, merge_commit
+            "git", "diff", "--name-status", f"{pr_parent}...{merge_commit}"
         ])
 
         branch_files_parsed = self._parse_file_status(branch_files.stdout)
@@ -762,8 +731,8 @@ class BranchAnalyzer:
                 "branch_files": branch_files_parsed,
                 "pr_files": [],
                 "git_commands": {
-                    "branch_merge_base": merge_base,
-                    "pr_merge_base": merge_base,
+                    "branch": branch,
+                    "base": target_branch,
                     "merge_commit": "HEAD"
                 },
                 "is_merge_base_diff": True
@@ -775,8 +744,9 @@ class BranchAnalyzer:
             "branch_files": filtered_branch_files,
             "pr_files": filtered_pr_files,
             "git_commands": {
-                "branch_merge_base": merge_base,
-                "pr_merge_base": pr_merge_base,
+                "branch": branch,
+                "base": target_branch,
+                "pr_parent": pr_parent,
                 "merge_commit": merge_commit
             }
         }
