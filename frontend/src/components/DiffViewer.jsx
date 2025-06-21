@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 const DiffViewer = ({ data, onClose }) => {
+  const diffContainerRef = React.useRef(null);
   const [viewMode, setViewMode] = useState("unified"); // 'split' or 'unified'
   const [expandedFiles, setExpandedFiles] = useState(new Set());
   const [selectedFile, setSelectedFile] = useState(null);
@@ -102,6 +103,20 @@ const DiffViewer = ({ data, onClose }) => {
       setSelectedFile(parsedDiffs.files[0].filename);
     }
   }, [parsedDiffs.files, selectedFile]);
+
+  // Focus on diff viewer when opening or switching files
+  React.useEffect(() => {
+    if (selectedFile && diffContainerRef.current) {
+      diffContainerRef.current.focus();
+    }
+  }, [selectedFile]);
+
+  // Focus on mount
+  React.useEffect(() => {
+    if (diffContainerRef.current) {
+      diffContainerRef.current.focus();
+    }
+  }, []);
 
   // Keyboard navigation for files
   useEffect(() => {
@@ -422,7 +437,11 @@ diff merged.diff local-branch.diff`,
           </div>
 
           {/* Diff Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div
+            className="flex-1 overflow-y-auto focus:outline-none"
+            ref={diffContainerRef}
+            tabIndex={0}
+          >
             {selectedFile ? (
               <div className="p-4">
                 <div className="mb-4">
