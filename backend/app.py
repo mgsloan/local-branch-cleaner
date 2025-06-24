@@ -213,8 +213,8 @@ class BranchAnalyzer:
         except:
             return None
 
-    def _get_tracking_branch_info(self, branch: str) -> tuple[Optional[str], int, int]:
-        """Get tracking branch and count of unpushed/unpulled commits"""
+    def _get_tracking_branch_info(self, branch: str) -> tuple[Optional[str], int, int, bool]:
+        """Get tracking branch and count of unpushed/unpulled commits, and whether remote branch exists"""
         # Use origin/branch-name as the tracking branch
         tracking_branch = f"origin/{branch}"
         logger.info(f"Checking tracking branch {tracking_branch} for {branch}")
@@ -224,7 +224,9 @@ class BranchAnalyzer:
             "git", "ls-remote", "--heads", "origin", branch
         ])
 
-        if check_remote.returncode != 0 or not check_remote.stdout.strip():
+        has_remote_branch = check_remote.returncode == 0 and bool(check_remote.stdout.strip())
+
+        if not has_remote_branch:
             # Try alternative method - check if ref exists locally
             alt_check = self._run_command([
                 "git", "rev-parse", "--verify", "--quiet", tracking_branch
@@ -232,7 +234,7 @@ class BranchAnalyzer:
             if alt_check.returncode != 0:
                 # Remote branch doesn't exist
                 logger.info(f"Remote branch {tracking_branch} does not exist")
-                return None, 0, 0
+                return None, 0, 0, False
 
         # Count unpushed commits (in local but not in remote)
         unpushed_cmd = ["git", "rev-list", "--count", f"{tracking_branch}..{branch}"]
@@ -263,7 +265,7 @@ class BranchAnalyzer:
         if unpushed > 0 or unpulled > 0:
             logger.info(f"Branch {branch}: {unpushed} unpushed, {unpulled} unpulled (tracking {tracking_branch})")
 
-        return tracking_branch, unpushed, unpulled
+        return tracking_branch, unpushed, unpulled, has_remote_branch
 
     def _get_branch_last_commit_info(self, branch: str) -> tuple[Optional[datetime], Optional[str]]:
         """Get last commit date and author for a branch"""
@@ -450,11 +452,8 @@ class BranchAnalyzer:
             # Get commit info
             last_commit_date, last_commit_author = self._get_branch_last_commit_info(branch)
 
-            # Get tracking branch info
-            tracking_branch, unpushed, unpulled = self._get_tracking_branch_info(branch)
-
-            # Check if remote branch exists
-            has_remote = self.check_remote_branch_exists(branch)
+            # Get tracking branch info and remote branch existence
+            tracking_branch, unpushed, unpulled, has_remote = self._get_tracking_branch_info(branch)
 
             # Determine status and check for differences
             status = BranchStatus.NO_PR
@@ -548,11 +547,6 @@ class BranchAnalyzer:
                     raise Exception(f"Failed to delete remote branch: {push_result.stderr}")
 
         return True
-
-    def check_remote_branch_exists(self, branch: str) -> bool:
-        """Check if a remote branch exists"""
-        result = self._run_command(["git", "ls-remote", "--heads", "origin", branch])
-        return result.returncode == 0 and bool(result.stdout.strip())
 
     def checkout_branch(self, branch: str) -> bool:
         """Checkout a local branch"""
