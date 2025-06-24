@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from enum import Enum
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, WebSocket, HTTPException, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -835,6 +836,11 @@ async def websocket_branches(websocket: WebSocket):
 
     # State variables
     analyzed_branches = set()
+    completed_count = 0
+
+    # Configure parallelism
+    max_workers = min(os.cpu_count() or 4, 8)  # Limit to 8 workers max
+    semaphore = asyncio.Semaphore(max_workers)
 
     try:
         # Get analyzer
@@ -866,41 +872,66 @@ async def websocket_branches(websocket: WebSocket):
             "message": f"Found {total} local branches to analyze"
         })
 
-        # Analyze branches and stream results
-        for i, branch in enumerate(branches):
+        # Create a thread pool for running git commands
+        executor = ThreadPoolExecutor(max_workers=max_workers)
 
-            # Skip already analyzed branches (for resume)
-            if branch in analyzed_branches:
-                logger.info(f"Skipping already analyzed branch: {branch}")
-                continue
+        async def analyze_branch_async(branch: str):
+            """Analyze a single branch asynchronously"""
+            nonlocal completed_count
 
-            await websocket.send_json({
-                "type": "progress",
-                "current": len(analyzed_branches) + 1,
-                "total": total,
-                "branch": branch
-            })
+            async with semaphore:
+                # Skip already analyzed branches (for resume)
+                if branch in analyzed_branches:
+                    logger.info(f"Skipping already analyzed branch: {branch}")
+                    return
 
-            # Run analysis in a separate thread to make it interruptible
-            # Run the synchronous analyze_branch in a thread pool
-            loop = asyncio.get_event_loop()
-            branch_info = await loop.run_in_executor(None, analyzer.analyze_branch, branch)
+                try:
+                    # Run analysis in executor
+                    loop = asyncio.get_event_loop()
+                    branch_info = await loop.run_in_executor(executor, analyzer.analyze_branch, branch)
 
-            analyzed_branches.add(branch)
+                    analyzed_branches.add(branch)
+                    completed_count += 1
 
-            # Send branch data
-            # Convert datetime to ISO format string for JSON serialization
-            branch_data = branch_info.model_dump()
-            if branch_data.get('last_commit_date'):
-                branch_data['last_commit_date'] = branch_data['last_commit_date'].isoformat()
+                    # Send progress update
+                    await websocket.send_json({
+                        "type": "progress",
+                        "current": completed_count,
+                        "total": total,
+                        "branch": branch
+                    })
 
-            await websocket.send_json({
-                "type": "branch",
-                "data": branch_data
-            })
+                    # Send branch data
+                    branch_data = branch_info.model_dump()
+                    if branch_data.get('last_commit_date'):
+                        branch_data['last_commit_date'] = branch_data['last_commit_date'].isoformat()
 
-            # Small delay to prevent overwhelming the client
-            await asyncio.sleep(0.1)
+                    await websocket.send_json({
+                        "type": "branch",
+                        "data": branch_data
+                    })
+
+                except Exception as e:
+                    logger.error(f"Error analyzing branch {branch}: {e}")
+                    # Send error for this specific branch
+                    await websocket.send_json({
+                        "type": "branch",
+                        "data": {
+                            "name": branch,
+                            "error": str(e),
+                            "pr_state": "unknown",
+                            "status": "error"
+                        }
+                    })
+
+        # Create tasks for all branches
+        tasks = [analyze_branch_async(branch) for branch in branches]
+
+        # Wait for all tasks to complete
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Clean up executor
+        executor.shutdown(wait=False)
 
         # Send completion when all branches are analyzed
         await websocket.send_json({
