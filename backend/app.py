@@ -859,9 +859,11 @@ async def websocket_branches(websocket: WebSocket):
             "message": "Fetching latest changes from remote..."
         })
 
-        fetch_result = analyzer._run_command(["git", "fetch", "--all"])
-        if fetch_result.returncode != 0:
-            logger.error(f"Git fetch failed: {fetch_result.stderr}")
+        # TODO: Consider re-enabling, but for now it slows down startup a lot
+        #
+        # fetch_result = analyzer._run_command(["git", "fetch", "--all"])
+        # if fetch_result.returncode != 0:
+        #     logger.error(f"Git fetch failed: {fetch_result.stderr}")
 
         # Get all local branches
         branches = analyzer.get_local_branches()
