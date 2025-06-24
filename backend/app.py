@@ -219,22 +219,17 @@ class BranchAnalyzer:
         tracking_branch = f"origin/{branch}"
         logger.info(f"Checking tracking branch {tracking_branch} for {branch}")
 
-        # Check if the remote branch exists using ls-remote
+        # Check if the remote branch exists locally (faster than ls-remote)
         check_remote = self._run_command([
-            "git", "ls-remote", "--heads", "origin", branch
+            "git", "rev-parse", "--verify", "--quiet", tracking_branch
         ])
 
-        has_remote_branch = check_remote.returncode == 0 and bool(check_remote.stdout.strip())
+        has_remote_branch = check_remote.returncode == 0
 
         if not has_remote_branch:
-            # Try alternative method - check if ref exists locally
-            alt_check = self._run_command([
-                "git", "rev-parse", "--verify", "--quiet", tracking_branch
-            ])
-            if alt_check.returncode != 0:
-                # Remote branch doesn't exist
-                logger.info(f"Remote branch {tracking_branch} does not exist")
-                return None, 0, 0, False
+            # Remote branch doesn't exist
+            logger.info(f"Remote branch {tracking_branch} does not exist")
+            return None, 0, 0, False
 
         # Count unpushed commits (in local but not in remote)
         unpushed_cmd = ["git", "rev-list", "--count", f"{tracking_branch}..{branch}"]
