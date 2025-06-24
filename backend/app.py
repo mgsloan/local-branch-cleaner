@@ -858,7 +858,7 @@ async def websocket_branches(websocket: WebSocket):
             "message": "Fetching latest changes from remote..."
         })
 
-        fetch_result = analyzer._run_command(["git", "fetch", "--all", "--prune"])
+        fetch_result = analyzer._run_command(["git", "fetch", "--all"])
         if fetch_result.returncode != 0:
             logger.error(f"Git fetch failed: {fetch_result.stderr}")
 
