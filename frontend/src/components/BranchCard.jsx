@@ -166,10 +166,17 @@ const BranchCard = ({
               {branch.last_commit_date && (
                 <div className="flex items-center space-x-1">
                   <Clock className="h-3 w-3" />
-                  <span>
+                  <span
+                    title={new Date(branch.last_commit_date).toLocaleString()}
+                    className="cursor-help"
+                  >
                     {formatDistanceToNow(new Date(branch.last_commit_date), {
                       addSuffix: true,
                     })}
+                  </span>
+                  <span className="text-gray-400 dark:text-gray-500">
+                    ({new Date(branch.last_commit_date).toLocaleDateString()}{" "}
+                    {new Date(branch.last_commit_date).toLocaleTimeString()})
                   </span>
                 </div>
               )}

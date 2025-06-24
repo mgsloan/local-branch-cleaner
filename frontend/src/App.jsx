@@ -214,7 +214,20 @@ function App() {
       return matchesSearch && branch.status === filterState;
     });
 
-    return filtered.reduce((acc, branch) => {
+    // Sort branches by last commit date (most recent first)
+    const sorted = filtered.sort((a, b) => {
+      // If both have dates, sort by date (descending)
+      if (a.last_commit_date && b.last_commit_date) {
+        return new Date(b.last_commit_date) - new Date(a.last_commit_date);
+      }
+      // If only one has a date, put it first
+      if (a.last_commit_date && !b.last_commit_date) return -1;
+      if (!a.last_commit_date && b.last_commit_date) return 1;
+      // If neither has a date, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+
+    return sorted.reduce((acc, branch) => {
       const category = branch.status || "no_pr";
       if (!acc[category]) acc[category] = [];
       acc[category].push(branch);
