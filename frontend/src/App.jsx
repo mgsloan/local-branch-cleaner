@@ -513,15 +513,18 @@ function App() {
           break;
 
         case "Enter":
-          e.preventDefault();
-          if (
-            selectedBranchIndex >= 0 &&
-            selectedBranchIndex < visibleBranches.length
-          ) {
-            const branch = visibleBranches[selectedBranchIndex];
-            const mergedPR = branch.prs?.find((pr) => pr.state === "MERGED");
-            // Show diff viewer for any branch (merge base diff if no differences)
-            viewDiff(branch, mergedPR?.number);
+          // Only handle Enter if no dialogs are open
+          if (!confirmDialog.open && !checkoutDialog.open && !showDiffViewer) {
+            e.preventDefault();
+            if (
+              selectedBranchIndex >= 0 &&
+              selectedBranchIndex < visibleBranches.length
+            ) {
+              const branch = visibleBranches[selectedBranchIndex];
+              const mergedPR = branch.prs?.find((pr) => pr.state === "MERGED");
+              // Show diff viewer for any branch (merge base diff if no differences)
+              viewDiff(branch, mergedPR?.number);
+            }
           }
           break;
 
@@ -598,6 +601,9 @@ function App() {
   }, [
     visibleBranches,
     selectedBranchIndex,
+    confirmDialog.open,
+    checkoutDialog.open,
+    showDiffViewer,
     selectedBranches,
     toggleBranchSelection,
     handleDelete,
