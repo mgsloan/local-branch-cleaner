@@ -114,89 +114,104 @@ function App() {
 
   // WebSocket connection for streaming branch data
   useEffect(() => {
-    const connectWebSocket = () => {
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
+    // Clean up any existing connection first
+    if (wsRef.current) {
+      if (
+        wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING
+      ) {
+        wsRef.current.close();
+      }
+      wsRef.current = null;
+    }
 
-      ws.onopen = () => {
-        console.log("WebSocket connected - clearing branches");
-        setBranches([]);
-        setLoading(true);
-        setProgress({ current: 0, total: 0 });
-      };
+    const connectionId = Math.random().toString(36).substr(2, 9);
+    console.log(`Creating WebSocket connection: ${connectionId}`);
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
 
-        switch (data.type) {
-          case "repo_info":
-            setRepoInfo(data.data);
-            console.log("Received repo info - clearing branches");
-            setBranches([]); // Clear branches when starting new analysis
-            break;
-
-          case "status":
-            setStatusMessage(data.message);
-            break;
-
-          case "progress":
-            setProgress((prev) => ({
-              current: Math.max(prev.current, data.current),
-              total: data.total,
-            }));
-            break;
-
-          case "branch":
-            setBranches((prev) => {
-              // Check if branch already exists to prevent duplicates
-              const exists = prev.some((b) => b.name === data.data.name);
-              if (exists) {
-                console.warn(`Duplicate branch received: ${data.data.name}`);
-                return prev;
-              }
-              console.log(
-                `Adding branch: ${data.data.name} (total: ${prev.length + 1})`,
-              );
-              return [...prev, data.data];
-            });
-            break;
-
-          case "complete":
-            setLoading(false);
-            setStatusMessage("");
-            break;
-
-          case "error":
-            console.error("WebSocket error:", data.message);
-            setLoading(false);
-            setStatusMessage(`Error: ${data.message}`);
-            break;
-
-          case "ping":
-            // Ignore ping messages
-            break;
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        setLoading(false);
-        setStatusMessage("Connection error");
-      };
-
-      ws.onclose = () => {
-        console.log("WebSocket disconnected");
-        wsRef.current = null;
-        setLoading(false);
-      };
-
-      return ws;
+    ws.onopen = () => {
+      console.log(`WebSocket connected (${connectionId}) - clearing branches`);
+      setBranches([]);
+      setLoading(true);
+      setProgress({ current: 0, total: 0 });
     };
 
-    const ws = connectWebSocket();
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      switch (data.type) {
+        case "repo_info":
+          setRepoInfo(data.data);
+          console.log("Received repo info - clearing branches");
+          setBranches([]); // Clear branches when starting new analysis
+          break;
+
+        case "status":
+          setStatusMessage(data.message);
+          break;
+
+        case "progress":
+          setProgress((prev) => ({
+            current: Math.max(prev.current, data.current),
+            total: data.total,
+          }));
+          break;
+
+        case "branch":
+          setBranches((prev) => {
+            // Check if branch already exists to prevent duplicates
+            const exists = prev.some((b) => b.name === data.data.name);
+            if (exists) {
+              console.warn(`Duplicate branch received: ${data.data.name}`);
+              return prev;
+            }
+            console.log(
+              `Adding branch: ${data.data.name} (total: ${prev.length + 1})`,
+            );
+            return [...prev, data.data];
+          });
+          break;
+
+        case "complete":
+          setLoading(false);
+          setStatusMessage("");
+          break;
+
+        case "error":
+          console.error("WebSocket error:", data.message);
+          setLoading(false);
+          setStatusMessage(`Error: ${data.message}`);
+          break;
+
+        case "ping":
+          // Ignore ping messages
+          break;
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      setLoading(false);
+      setStatusMessage("Connection error");
+    };
+
+    ws.onclose = () => {
+      console.log(`WebSocket disconnected (${connectionId})`);
+      wsRef.current = null;
+      setLoading(false);
+    };
+
     return () => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.close();
+      if (wsRef.current) {
+        if (
+          wsRef.current.readyState === WebSocket.OPEN ||
+          wsRef.current.readyState === WebSocket.CONNECTING
+        ) {
+          wsRef.current.close();
+        }
+        wsRef.current = null;
       }
     };
   }, []);
